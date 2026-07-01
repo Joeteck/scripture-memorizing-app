@@ -1,20 +1,20 @@
-import React, { useState } from "react";
-import {
-  Alert,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+// app/(tabs)/add.tsx
+import React, { useCallback, useState } from "react";
+import { ScrollView, StyleSheet, Text, View, Pressable } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useFocusEffect } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
 
 import { useTheme, type } from "@/theme";
 import { useAuth } from "@/hooks/useAuth";
 import { useVerses } from "@/hooks/useVerses";
+import { getDefaultReminderInterval } from "@/lib/preferences";
+import { useToast } from "@/lib/toast";
 
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { CategoryPill } from "@/components/CategoryPill";
+import { SmartReferenceInput } from "@/components/SmartReferenceInput";
+import { QuickAddCategoryModal } from "@/components/QuickAddCategoryModal";
 
 const REMINDER_OPTIONS = [
   { label: "15 min", value: 15 },
@@ -23,360 +23,138 @@ const REMINDER_OPTIONS = [
   { label: "2 Hours", value: 120 },
 ];
 
-const TRANSLATIONS = [
-  "KJV",
-  "NKJV",
-  "ESV",
-  "NIV",
-];
+const TRANSLATIONS = ["KJV", "NKJV", "ESV", "NIV"];
 
 export default function AddVerseScreen() {
   const theme = useTheme();
-
   const { user } = useAuth();
+  const toast = useToast();
 
-  const {
-    addVerse,
-    categories,
-  } = useVerses(user?.id ?? null);
+  const { addVerse, addCategory, categories } = useVerses(user?.id ?? null);
 
   const [reference, setReference] = useState("");
+  const [translation, setTranslation] = useState("KJV");
+  const [categoryId, setCategoryId] = useState<string | null>(null);
+  const [interval, setInterval] = useState(60);
+  const [defaultInterval, setDefaultInterval] = useState(60);
+  const [loading, setLoading] = useState(false);
+  const [quickAddVisible, setQuickAddVisible] = useState(false);
 
-  const [translation, setTranslation] =
-    useState("KJV");
-
-  const [categoryId, setCategoryId] =
-    useState<string | null>(null);
-
-  const [interval, setInterval] =
-    useState(60);
-
-  const [loading, setLoading] =
-    useState(false);
+  useFocusEffect(
+    useCallback(() => {
+      getDefaultReminderInterval().then((minutes) => {
+        setDefaultInterval(minutes);
+        setInterval(minutes);
+      });
+    }, [])
+  );
 
   async function handleAdd() {
-    if (!reference.trim()) {
-      Alert.alert(
-        "Verse Required",
-        "Enter something like John 3:16."
-      );
+    const ref = reference.trim();
+    if (!ref) {
+      toast.showError("Verse Required", "Enter something like John 3:16.");
       return;
     }
 
     try {
       setLoading(true);
-
-      await addVerse({
-        reference: reference.trim(),
-        categoryId,
-        reminderIntervalMinutes: interval,
-        translation,
-      });
-
-      Alert.alert(
-        "Verse Added",
-        "Your reminder has been scheduled."
-      );
-
+      await addVerse({ reference: ref, categoryId, reminderIntervalMinutes: interval, translation });
+      toast.showSuccess("Verse Added!", "Your reminder has been scheduled.");
       setReference("");
       setCategoryId(null);
-      setInterval(60);
+      setInterval(defaultInterval);
     } catch (err: any) {
-      Alert.alert(
-        "Couldn't Add Verse",
-        err.message ??
-          "Something went wrong."
-      );
+      toast.showError("Couldn't Add Verse", err.message ?? "Something went wrong.");
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <SafeAreaView
-      edges={["top"]}
-      style={[
-        styles.container,
-        {
-          backgroundColor:
-            theme.background,
-        },
-      ]}
-    >
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={{
-          padding: 20,
-          paddingBottom: 60,
-        }}
-      >
-        <Text
-          style={[
-            type.sectionLabel,
-            {
-              color:
-                theme.textSecondary,
-            },
-          ]}
-        >
-          NEW VERSE
-        </Text>
+    <SafeAreaView edges={["top"]} style={[styles.container, { backgroundColor: theme.background }]}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ padding: 20, paddingBottom: 60 }}>
+        <Text style={[type.sectionLabel, { color: theme.textSecondary }]}>NEW VERSE</Text>
+        <Text style={[type.screenTitle, { color: theme.text, marginBottom: 28 }]}>Add Scripture</Text>
 
-        <Text
-          style={[
-            type.screenTitle,
-            {
-              color: theme.text,
-              marginBottom: 30,
-            },
-          ]}
-        >
-          Add Scripture
-        </Text>
-
-        {/* Reference */}
-
-        <View
-          style={[
-            styles.card,
-            {
-              backgroundColor:
-                theme.surface,
-            },
-          ]}
-        >
-          <Text
-            style={[
-              styles.label,
-              {
-                color: theme.text,
-              },
-            ]}
-          >
-            Bible Reference
-          </Text>
-
-          <TextInput
+        {/* Smart Reference */}
+        <View style={[styles.card, { backgroundColor: theme.surface }]}>
+          <Text style={[styles.label, { color: theme.text }]}>Bible Reference</Text>
+          <SmartReferenceInput
             value={reference}
-            onChangeText={setReference}
-            placeholder="John 3:16"
-            placeholderTextColor={
-              theme.textSecondary
-            }
-            style={[
-              styles.input,
-              {
-                color: theme.text,
-                borderColor:
-                  theme.border,
-              },
-            ]}
+            onChange={setReference}
           />
-
-          {reference.length > 0 && (
-            <Text
-              style={{
-                marginTop: 12,
-                color:
-                  theme.textSecondary,
-              }}
-            >
-              This verse will be downloaded
-              automatically after saving.
-            </Text>
-          )}
         </View>
 
         {/* Translation */}
-
-        <View
-          style={[
-            styles.card,
-            {
-              backgroundColor:
-                theme.surface,
-            },
-          ]}
-        >
-          <Text
-            style={[
-              styles.label,
-              {
-                color: theme.text,
-              },
-            ]}
-          >
-            Translation
-          </Text>
-
+        <View style={[styles.card, { backgroundColor: theme.surface }]}>
+          <Text style={[styles.label, { color: theme.text }]}>Translation</Text>
           <View style={styles.wrap}>
             {TRANSLATIONS.map((item) => (
-              <CategoryPill
-                key={item}
-                label={item}
-                color={theme.accent}
-                selected={
-                  translation === item
-                }
-                onPress={() =>
-                  setTranslation(item)
-                }
-              />
+              <CategoryPill key={item} label={item} color={theme.accent} selected={translation === item} onPress={() => setTranslation(item)} />
             ))}
           </View>
         </View>
 
-        {/* Categories */}
-
-        <View
-          style={[
-            styles.card,
-            {
-              backgroundColor:
-                theme.surface,
-            },
-          ]}
-        >
-          <Text
-            style={[
-              styles.label,
-              {
-                color: theme.text,
-              },
-            ]}
-          >
-            Category
-          </Text>
-
-          <View style={styles.wrap}>
+        {/* Categories — live shared store: refreshes instantly across tabs */}
+        <View style={[styles.card, { backgroundColor: theme.surface }]}>
+          <View style={styles.categoryHeader}>
+            <Text style={[styles.label, { color: theme.text, marginBottom: 0 }]}>Category</Text>
+            <Pressable
+              onPress={() => setQuickAddVisible(true)}
+              style={[styles.quickAddBtn, { backgroundColor: theme.accentSoft }]}
+              hitSlop={6}
+            >
+              <Ionicons name="add" size={16} color={theme.accent} />
+              <Text style={[styles.quickAddText, { color: theme.accent }]}> New Category</Text>
+            </Pressable>
+          </View>
+          <View style={[styles.wrap, { marginTop: 12 }]}>
             {categories.map((category) => (
-              <CategoryPill
-                key={category.id}
-                label={category.name}
-                color={category.color}
-                selected={
-                  category.id ===
-                  categoryId
-                }
-                onPress={() =>
-                  setCategoryId(
-                    category.id
-                  )
-                }
-              />
+              <CategoryPill key={category.id} label={category.name} color={category.color} selected={category.id === categoryId} onPress={() => setCategoryId(category.id)} />
             ))}
           </View>
-
           {categories.length === 0 && (
-            <Text
-              style={{
-                color:
-                  theme.textSecondary,
-                marginTop: 10,
-              }}
-            >
-              No categories yet.
+            <Text style={{ color: theme.textSecondary, marginTop: 10 }}>
+              No categories yet — tap "New Category" above to create one.
             </Text>
           )}
         </View>
 
         {/* Reminder */}
-
-        <View
-          style={[
-            styles.card,
-            {
-              backgroundColor:
-                theme.surface,
-            },
-          ]}
-        >
-          <Text
-            style={[
-              styles.label,
-              {
-                color: theme.text,
-              },
-            ]}
-          >
-            Reminder Interval
-          </Text>
-
+        <View style={[styles.card, { backgroundColor: theme.surface }]}>
+          <Text style={[styles.label, { color: theme.text }]}>Reminder Interval</Text>
           <View style={styles.wrap}>
-            {REMINDER_OPTIONS.map(
-              (item) => (
-                <CategoryPill
-                  key={item.value}
-                  label={item.label}
-                  color={theme.accent}
-                  selected={
-                    interval ===
-                    item.value
-                  }
-                  onPress={() =>
-                    setInterval(
-                      item.value
-                    )
-                  }
-                />
-              )
-            )}
+            {REMINDER_OPTIONS.map((item) => (
+              <CategoryPill key={item.value} label={item.label} color={theme.accent} selected={interval === item.value} onPress={() => setInterval(item.value)} />
+            ))}
           </View>
-
-          <Text
-            style={{
-              marginTop: 14,
-              color:
-                theme.textSecondary,
-            }}
-          >
-            You'll receive a notification
-            every {interval} minutes until
-            this verse is marked as
-            mastered.
+          <Text style={{ marginTop: 14, color: theme.textSecondary }}>
+            You'll receive a notification every {interval} minutes until this verse is marked as mastered.
           </Text>
         </View>
 
-        <PrimaryButton
-          label="Add Verse"
-          onPress={handleAdd}
-          loading={loading}
-          style={{
-            marginTop: 20,
-          }}
-        />
+        <PrimaryButton label="Add Verse" onPress={handleAdd} loading={loading} style={{ marginTop: 20 }} />
       </ScrollView>
+
+      <QuickAddCategoryModal
+        visible={quickAddVisible}
+        onClose={() => setQuickAddVisible(false)}
+        onCreate={async (name, color) => {
+          const created = await addCategory(name, color);
+          setCategoryId(created.id);
+          toast.showSuccess("Category Created", `"${name}" is ready and selected.`);
+        }}
+      />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-
-  card: {
-    borderRadius: 18,
-    padding: 18,
-    marginBottom: 18,
-  },
-
-  label: {
-    fontSize: 16,
-    fontWeight: "700",
-    marginBottom: 12,
-  },
-
-  input: {
-    borderWidth: 1,
-    borderRadius: 14,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    fontSize: 17,
-  },
-
-  wrap: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-  },
+  container: { flex: 1 },
+  card: { borderRadius: 18, padding: 18, marginBottom: 18 },
+  label: { fontSize: 16, fontWeight: "700", marginBottom: 12 },
+  wrap: { flexDirection: "row", flexWrap: "wrap" },
+  categoryHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  quickAddBtn: { flexDirection: "row", alignItems: "center", paddingHorizontal: 12, paddingVertical: 7, borderRadius: 999 },
+  quickAddText: { fontSize: 13, fontWeight: "700" },
 });

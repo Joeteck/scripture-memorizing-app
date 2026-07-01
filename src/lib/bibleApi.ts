@@ -1,32 +1,245 @@
+// lib/bible.ts
 import { BibleApiResult } from "@/types";
 
-const BASE = process.env.EXPO_PUBLIC_BIBLE_API_BASE || "https://bible-api.com";
+// bolls.life API base URL
+const BASE = "https://bolls.life";
 
-/**
- * Fetches verse text by a human reference like "John 1:1" or "Romans 8:28-29".
- * bible-api.com needs no key and defaults to the World English Bible (web);
- * pass translation="kjv" for King James, etc.
- */
-export async function fetchVerse(
-  reference: string,
-  translation: string = "kjv"
-): Promise<BibleApiResult> {
-  const url = `${BASE}/${encodeURIComponent(reference)}?translation=${translation}`;
-  const res = await fetch(url);
+// Standard 66-book canon order
+const BOOKS: { id: number; display: string; names: string[] }[] = [
+  { id: 1, display: "Genesis", names: ["genesis", "gen"] },
+  { id: 2, display: "Exodus", names: ["exodus", "exo", "ex"] },
+  { id: 3, display: "Leviticus", names: ["leviticus", "lev"] },
+  { id: 4, display: "Numbers", names: ["numbers", "num"] },
+  { id: 5, display: "Deuteronomy", names: ["deuteronomy", "deut", "deu"] },
+  { id: 6, display: "Joshua", names: ["joshua", "josh", "jos"] },
+  { id: 7, display: "Judges", names: ["judges", "judg", "jdg"] },
+  { id: 8, display: "Ruth", names: ["ruth", "rut"] },
+  { id: 9, display: "1 Samuel", names: ["1 samuel", "1samuel", "1 sam", "i samuel"] },
+  { id: 10, display: "2 Samuel", names: ["2 samuel", "2samuel", "2 sam", "ii samuel"] },
+  { id: 11, display: "1 Kings", names: ["1 kings", "1kings", "1 ki", "i kings"] },
+  { id: 12, display: "2 Kings", names: ["2 kings", "2kings", "2 ki", "ii kings"] },
+  { id: 13, display: "1 Chronicles", names: ["1 chronicles", "1chronicles", "1 chron", "1 chr"] },
+  { id: 14, display: "2 Chronicles", names: ["2 chronicles", "2chronicles", "2 chron", "2 chr"] },
+  { id: 15, display: "Ezra", names: ["ezra"] },
+  { id: 16, display: "Nehemiah", names: ["nehemiah", "neh"] },
+  { id: 17, display: "Esther", names: ["esther", "esth", "est"] },
+  { id: 18, display: "Job", names: ["job"] },
+  { id: 19, display: "Psalms", names: ["psalms", "psalm", "ps", "psa"] },
+  { id: 20, display: "Proverbs", names: ["proverbs", "prov", "pro"] },
+  { id: 21, display: "Ecclesiastes", names: ["ecclesiastes", "eccl", "ecc"] },
+  { id: 22, display: "Song of Solomon", names: ["song of solomon", "song of songs", "songs", "sos"] },
+  { id: 23, display: "Isaiah", names: ["isaiah", "isa"] },
+  { id: 24, display: "Jeremiah", names: ["jeremiah", "jer"] },
+  { id: 25, display: "Lamentations", names: ["lamentations", "lam"] },
+  { id: 26, display: "Ezekiel", names: ["ezekiel", "ezek", "eze"] },
+  { id: 27, display: "Daniel", names: ["daniel", "dan"] },
+  { id: 28, display: "Hosea", names: ["hosea", "hos"] },
+  { id: 29, display: "Joel", names: ["joel"] },
+  { id: 30, display: "Amos", names: ["amos"] },
+  { id: 31, display: "Obadiah", names: ["obadiah", "obad", "oba"] },
+  { id: 32, display: "Jonah", names: ["jonah", "jon"] },
+  { id: 33, display: "Micah", names: ["micah", "mic"] },
+  { id: 34, display: "Nahum", names: ["nahum", "nah"] },
+  { id: 35, display: "Habakkuk", names: ["habakkuk", "hab"] },
+  { id: 36, display: "Zephaniah", names: ["zephaniah", "zeph", "zep"] },
+  { id: 37, display: "Haggai", names: ["haggai", "hag"] },
+  { id: 38, display: "Zechariah", names: ["zechariah", "zech", "zec"] },
+  { id: 39, display: "Malachi", names: ["malachi", "mal"] },
+  { id: 40, display: "Matthew", names: ["matthew", "matt", "mat"] },
+  { id: 41, display: "Mark", names: ["mark", "mar", "mrk"] },
+  { id: 42, display: "Luke", names: ["luke", "luk"] },
+  { id: 43, display: "John", names: ["john", "jhn"] },
+  { id: 44, display: "Acts", names: ["acts", "act"] },
+  { id: 45, display: "Romans", names: ["romans", "rom"] },
+  { id: 46, display: "1 Corinthians", names: ["1 corinthians", "1corinthians", "1 cor"] },
+  { id: 47, display: "2 Corinthians", names: ["2 corinthians", "2corinthians", "2 cor"] },
+  { id: 48, display: "Galatians", names: ["galatians", "gal"] },
+  { id: 49, display: "Ephesians", names: ["ephesians", "eph"] },
+  { id: 50, display: "Philippians", names: ["philippians", "phil", "php"] },
+  { id: 51, display: "Colossians", names: ["colossians", "col"] },
+  { id: 52, display: "1 Thessalonians", names: ["1 thessalonians", "1thessalonians", "1 thess", "1 th"] },
+  { id: 53, display: "2 Thessalonians", names: ["2 thessalonians", "2thessalonians", "2 thess", "2 th"] },
+  { id: 54, display: "1 Timothy", names: ["1 timothy", "1timothy", "1 tim"] },
+  { id: 55, display: "2 Timothy", names: ["2 timothy", "2timothy", "2 tim"] },
+  { id: 56, display: "Titus", names: ["titus", "tit"] },
+  { id: 57, display: "Philemon", names: ["philemon", "phlm", "phm"] },
+  { id: 58, display: "Hebrews", names: ["hebrews", "heb"] },
+  { id: 59, display: "James", names: ["james", "jas", "jam"] },
+  { id: 60, display: "1 Peter", names: ["1 peter", "1peter", "1 pet", "1 pe"] },
+  { id: 61, display: "2 Peter", names: ["2 peter", "2peter", "2 pet", "2 pe"] },
+  { id: 62, display: "1 John", names: ["1 john", "1john", "1 jn"] },
+  { id: 63, display: "2 John", names: ["2 john", "2john", "2 jn"] },
+  { id: 64, display: "3 John", names: ["3 john", "3john", "3 jn"] },
+  { id: 65, display: "Jude", names: ["jude", "jud"] },
+  { id: 66, display: "Revelation", names: ["revelation", "revelations", "rev"] },
+];
 
-  if (!res.ok) {
-    throw new Error(`Could not find "${reference}". Check the reference and try again.`);
+const BOOK_LOOKUP: Record<string, { id: number; display: string }> = {};
+for (const book of BOOKS) {
+  for (const alias of book.names) {
+    BOOK_LOOKUP[alias] = { id: book.id, display: book.display };
+  }
+}
+
+function normalizeBookName(s: string): string {
+  return s.toLowerCase().replace(/\./g, "").replace(/\s+/g, " ").trim();
+}
+
+function stripHtml(html: string): string {
+  if (!html) return '';
+  return html
+    .replace(/<S>\d+<\/S>/g, "")   // remove Strong's numbers e.g. <S>7225</S>
+    .replace(/<[^>]*>/g, "")        // remove any remaining HTML tags
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+interface ParsedReference {
+  bookId: number;
+  bookDisplay: string;
+  chapter: number;
+  verse: number;
+}
+
+function parseReference(reference: string): ParsedReference {
+  // Match format: "Book Chapter:Verse" e.g., "John 3:16"
+  const match = reference
+    .trim()
+    .match(/^(.+?)\s+(\d+):(\d+)$/);
+
+  if (!match) {
+    throw new Error(`Invalid format. Please use "Book Chapter:Verse" (e.g., "John 3:16")`);
   }
 
-  const data = await res.json();
+  const [, rawBook, chapterStr, verseStr] = match;
+  const normalizedBook = normalizeBookName(rawBook);
+  const book = BOOK_LOOKUP[normalizedBook];
 
-  if (!data?.text) {
-    throw new Error(`No verse text returned for "${reference}".`);
+  if (!book) {
+    throw new Error(`Unknown book "${rawBook.trim()}". Try the full name, e.g. "Romans".`);
   }
 
   return {
-    reference: data.reference || reference,
-    text: String(data.text).trim().replace(/\n+/g, " "),
-    translation: (data.translation_id || translation).toUpperCase(),
+    bookId: book.id,
+    bookDisplay: book.display,
+    chapter: parseInt(chapterStr, 10),
+    verse: parseInt(verseStr, 10),
   };
+}
+
+// Known working translations for bolls.life
+const SUPPORTED_TRANSLATIONS = ['KJV', 'NKJV', 'ESV', 'NIV', 'YLT', 'ASV', 'WEB'];
+
+/**
+ * Fetches a single verse from bolls.life API
+ * 
+ * @param reference - The verse reference (e.g., "John 3:16")
+ * @param translation - The translation (e.g., "KJV", "NKJV", "ESV", "NIV")
+ * @returns The verse text
+ * 
+ * Example:
+ * const verse = await fetchVerse("John 3:16", "KJV");
+ * console.log(verse.text); // "For God so loved the world..."
+ */
+export async function fetchVerse(
+  reference: string,
+  translation: string = "KJV"
+): Promise<BibleApiResult> {
+  const parsed = parseReference(reference);
+  const code = translation.toUpperCase();
+
+  // Check if translation is supported
+  if (!SUPPORTED_TRANSLATIONS.includes(code)) {
+    throw new Error(`Translation "${code}" is not supported. Available: ${SUPPORTED_TRANSLATIONS.join(', ')}`);
+  }
+
+  // Build the URL: https://bolls.life/get-verse/KJV/43/3/16/
+  const url = `${BASE}/get-verse/${code}/${parsed.bookId}/${parsed.chapter}/${parsed.verse}/`;
+
+  try {
+    const response = await fetch(url);
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        throw new Error(`Verse "${parsed.bookDisplay} ${parsed.chapter}:${parsed.verse}" not found in ${code}.`);
+      }
+      throw new Error(`HTTP ${response.status}: Failed to fetch verse.`);
+    }
+
+    const data = await response.json();
+
+    // Validate response format
+    if (!data || typeof data !== 'object') {
+      throw new Error(`Invalid response format for "${reference}" in ${code}.`);
+    }
+
+    // Get the verse text - the API returns: { pk, verse, text, comment }
+    const verseText = data.text || data.verse_text || data.verse;
+    
+    if (!verseText || typeof verseText !== 'string' || !verseText.trim()) {
+      throw new Error(`No verse text returned for "${reference}" in ${code}.`);
+    }
+
+    return {
+      reference: `${parsed.bookDisplay} ${parsed.chapter}:${parsed.verse}`,
+      text: stripHtml(verseText),
+      translation: code,
+    };
+
+  } catch (error) {
+    if (error instanceof Error) {
+      throw new Error(`Failed to fetch verse: ${error.message}`);
+    }
+    throw new Error(`Failed to fetch verse: Unknown error`);
+  }
+}
+
+/**
+ * Validates a reference format
+ */
+export function validateReference(reference: string): { 
+  valid: boolean; 
+  error?: string;
+  parsed?: { book: string; chapter: number; verse: number };
+} {
+  try {
+    const parsed = parseReference(reference);
+    return { 
+      valid: true, 
+      parsed: {
+        book: parsed.bookDisplay,
+        chapter: parsed.chapter,
+        verse: parsed.verse,
+      }
+    };
+  } catch (error) {
+    return { 
+      valid: false, 
+      error: error instanceof Error ? error.message : 'Invalid reference format' 
+    };
+  }
+}
+
+/**
+ * Helper to get book ID from name
+ */
+export function getBookId(bookName: string): number | null {
+  const normalized = normalizeBookName(bookName);
+  const book = BOOK_LOOKUP[normalized];
+  return book ? book.id : null;
+}
+
+/**
+ * Helper to get book display name from ID
+ */
+export function getBookDisplay(bookId: number): string | null {
+  const book = BOOKS.find(b => b.id === bookId);
+  return book ? book.display : null;
+}
+
+/**
+ * Get available translations
+ */
+export function getAvailableTranslations(): string[] {
+  return SUPPORTED_TRANSLATIONS;
 }

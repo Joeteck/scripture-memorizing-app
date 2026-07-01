@@ -33,7 +33,8 @@ export const supabase = createClient(
       storage: AsyncStorage,
       autoRefreshToken: true,
       persistSession: true,
-      detectSessionInUrl: false,
+      flowType: 'pkce',             // 👈 FORCES the PKCE workflow
+      detectSessionInUrl: false,    // 👈 MUST be false in Native mobile environments
     },
     global: {
       headers: {

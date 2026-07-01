@@ -2,6 +2,23 @@
 
 create extension if not exists "pgcrypto";
 
+-- ────────────────────────────────────────────────────────────
+-- User profiles (lightweight — name + avatar preference)
+-- ────────────────────────────────────────────────────────────
+create table if not exists profiles (
+  id uuid primary key references auth.users(id) on delete cascade,
+  display_name text,
+  avatar_index int default 0,
+  updated_at timestamptz default now()
+);
+alter table profiles enable row level security;
+create policy "profiles: owner read"   on profiles for select using (auth.uid() = id);
+create policy "profiles: owner write"  on profiles for insert with check (auth.uid() = id);
+create policy "profiles: owner update" on profiles for update using (auth.uid() = id);
+
+-- ────────────────────────────────────────────────────────────
+-- Categories
+-- ────────────────────────────────────────────────────────────
 create table if not exists categories (
   id uuid primary key default gen_random_uuid(),
   user_id uuid references auth.users(id) on delete cascade not null,
@@ -9,7 +26,15 @@ create table if not exists categories (
   color text default '#3D4B8C',
   created_at timestamptz default now()
 );
+alter table categories enable row level security;
+create policy "categories: owner read"   on categories for select using (auth.uid() = user_id);
+create policy "categories: owner write"  on categories for insert with check (auth.uid() = user_id);
+create policy "categories: owner update" on categories for update using (auth.uid() = user_id);
+create policy "categories: owner delete" on categories for delete using (auth.uid() = user_id);
 
+-- ────────────────────────────────────────────────────────────
+-- Verses
+-- ────────────────────────────────────────────────────────────
 create table if not exists verses (
   id uuid primary key default gen_random_uuid(),
   user_id uuid references auth.users(id) on delete cascade not null,
@@ -23,19 +48,25 @@ create table if not exists verses (
   reminder_interval_minutes int default 60,
   created_at timestamptz default now()
 );
-
-alter table categories enable row level security;
 alter table verses enable row level security;
-
--- Each person can only ever see/edit their own rows.
-create policy "categories: owner read" on categories for select using (auth.uid() = user_id);
-create policy "categories: owner write" on categories for insert with check (auth.uid() = user_id);
-create policy "categories: owner update" on categories for update using (auth.uid() = user_id);
-create policy "categories: owner delete" on categories for delete using (auth.uid() = user_id);
-
-create policy "verses: owner read" on verses for select using (auth.uid() = user_id);
-create policy "verses: owner write" on verses for insert with check (auth.uid() = user_id);
+create policy "verses: owner read"   on verses for select using (auth.uid() = user_id);
+create policy "verses: owner write"  on verses for insert with check (auth.uid() = user_id);
 create policy "verses: owner update" on verses for update using (auth.uid() = user_id);
 create policy "verses: owner delete" on verses for delete using (auth.uid() = user_id);
 
 create index if not exists verses_user_status_idx on verses (user_id, status);
+
+-- ────────────────────────────────────────────────────────────
+-- Feedback
+-- ────────────────────────────────────────────────────────────
+create table if not exists feedback (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users(id) on delete set null,
+  user_email text,
+  type text default 'general' check (type in ('bug', 'suggestion', 'general')),
+  message text not null,
+  created_at timestamptz default now()
+);
+alter table feedback enable row level security;
+-- Users can insert their own feedback; only admins read it (use service role key)
+create policy "feedback: anyone insert" on feedback for insert with check (true);

@@ -12,11 +12,22 @@ export const fonts = {
 };
 
 export const type = {
+  // Large serif display — used for the Dashboard progress-ring percentage.
+  hero: { fontFamily: fonts.serifSemiBold, fontSize: 36, lineHeight: 42 },
+
   verseBody: { fontFamily: fonts.serifRegular, fontSize: 22, lineHeight: 34 },
   verseReference: { fontFamily: fonts.serifSemiBold, fontSize: 15, letterSpacing: 0.3 },
+
   screenTitle: { fontFamily: fonts.sansBold, fontSize: 28, letterSpacing: 0.1 },
+  sectionTitle: { fontFamily: fonts.sansBold, fontSize: 22 },
   sectionLabel: { fontFamily: fonts.sansSemiBold, fontSize: 13, letterSpacing: 1.2, textTransform: "uppercase" as const },
+
   body: { fontFamily: fonts.sansRegular, fontSize: 16, lineHeight: 22 },
+  bodyBold: { fontFamily: fonts.sansSemiBold, fontSize: 16 },
   caption: { fontFamily: fonts.sansRegular, fontSize: 13, lineHeight: 18 },
   button: { fontFamily: fonts.sansSemiBold, fontSize: 16 },
+
+  // Dashboard stat tiles
+  statNumber: { fontFamily: fonts.sansBold, fontSize: 26 },
+  statLabel: { fontFamily: fonts.sansMedium, fontSize: 13 },
 };

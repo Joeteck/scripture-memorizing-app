@@ -24,7 +24,7 @@ export function StatsCard({
     }: StatsCardProps) {
     const theme = useTheme();
 
-    const iconColor = color ?? theme.primary;
+    const iconColor = color ?? theme.accent;
 
     return (
         <View
