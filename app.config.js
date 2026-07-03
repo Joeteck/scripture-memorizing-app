@@ -32,14 +32,17 @@ export default {
           sounds: [],
         },
       ],
-      [
-        "@sentry/react-native/expo",
-        {
-          organization: "aji-technology",
-          project: "scripture-memory",
-          uploadSourceMaps: false,
-        },
-      ],
+      // Sentry temporarily disabled — SENTRY_AUTH_TOKEN was rejected (401)
+      // during the source-map upload step, blocking builds. Re-add once
+      // the token is fixed:
+      // [
+      //   "@sentry/react-native/expo",
+      //   {
+      //     organization: "aji-technology",
+      //     project: "scripture-memory",
+      //     uploadSourceMaps: false,
+      //   },
+      // ],
     ],
 
     ios: {
