@@ -37,6 +37,7 @@ export default {
         {
           organization: "aji-technology",
           project: "scripture-memory",
+          uploadSourceMaps: false,
         },
       ],
     ],
