@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
+import { setMonitoringUser, logError } from "@/lib/monitoring";
 import {
   signIn,
   signUp,
@@ -23,28 +24,22 @@ export function useAuth() {
 
     async function initialize() {
       try {
-        console.log("🔄 Loading initial session...");
-
         const {
           data: { session },
           error,
         } = await supabase.auth.getSession();
 
         if (error) {
-          console.error("Initial session error:", error);
+          logError(error, { where: "useAuth: getSession" });
         }
 
         if (!mounted) return;
 
-        console.log(
-          "Initial session:",
-          session ? "SIGNED IN" : "SIGNED OUT"
-        );
-
         setSession(session);
         setUser(session?.user ?? null);
+        setMonitoringUser(session?.user?.id ?? null);
       } catch (e) {
-        console.error("Auth initialization failed:", e);
+        logError(e, { where: "useAuth.initialize" });
       } finally {
         if (mounted) {
           setLoading(false);
@@ -57,14 +52,11 @@ export function useAuth() {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, session) => {
-      console.log("────────────────────────");
-      console.log("Auth Event:", event);
-      console.log("Has Session:", !!session);
-
       if (!mounted) return;
 
       setSession(session);
       setUser(session?.user ?? null);
+      setMonitoringUser(session?.user?.id ?? null);
 
       // Once Supabase reports any auth state,
       // we know auth initialization is complete.

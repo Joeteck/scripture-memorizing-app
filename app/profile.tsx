@@ -8,6 +8,7 @@ import Constants from "expo-constants";
 import { useTheme, useThemeMode, type, spacing } from "@/theme";
 import { useAuth } from "@/hooks/useAuth";
 import { getDefaultReminderInterval, setDefaultReminderInterval } from "@/lib/preferences";
+import { logError } from "@/lib/monitoring";
 
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { CategoryPill } from "@/components/CategoryPill";
@@ -55,6 +56,7 @@ export default function ProfileScreen() {
       if (error) throw error;
       Alert.alert("Check your email", `A password reset link was sent to ${user.email}.`);
     } catch (e: any) {
+      logError(e, { where: "profile: reset password" });
       Alert.alert("Couldn't send reset email", e.message ?? "Something went wrong.");
     } finally {
       setSendingReset(false);
@@ -74,6 +76,7 @@ export default function ProfileScreen() {
             // app/_layout.tsx's session listener handles the redirect to sign-in.
           } catch (e: any) {
             setSigningOut(false);
+            logError(e, { where: "profile: sign out" });
             Alert.alert("Couldn't sign out", e.message ?? "Something went wrong.");
           }
         },

@@ -10,6 +10,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useTheme, type, spacing } from "@/theme";
 import { useAuth } from "@/hooks/useAuth";
 import { submitFeedback } from "@/lib/feedback";
+import { logError } from "@/lib/monitoring";
 import { useToast } from "@/lib/toast";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { CategoryPill } from "@/components/CategoryPill";
@@ -38,10 +39,11 @@ export default function FeedbackScreen() {
     try {
       setLoading(true);
       await submitFeedback({ userId: user?.id ?? null, userEmail: user?.email ?? null, type, message: message.trim() });
-      toast.showSuccess("Feedback Sent!", "Thank you for helping us improve.");
+      toast.showSuccess("Thank You", "Your note has been sent — we read every one.");
       setMessage("");
       router.back();
     } catch (e: any) {
+      logError(e, { where: "submit feedback", type });
       toast.showError("Couldn't Send", e.message ?? "Please try again.");
     } finally {
       setLoading(false);

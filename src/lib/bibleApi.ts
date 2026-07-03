@@ -1,5 +1,6 @@
-// lib/bible.ts
+// lib/bibleApi.ts
 import { BibleApiResult } from "@/types";
+import { logError } from "@/lib/monitoring";
 
 // bolls.life API base URL
 const BASE = "https://bolls.life";
@@ -88,8 +89,8 @@ function normalizeBookName(s: string): string {
 function stripHtml(html: string): string {
   if (!html) return '';
   return html
-    .replace(/<S>\d+<\/S>/g, "")   // remove Strong's numbers e.g. <S>7225</S>
-    .replace(/<[^>]*>/g, "")        // remove any remaining HTML tags
+    .replace(/<S>\d+<\/S>/g, "")
+    .replace(/<[^>]*>/g, "")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -102,10 +103,9 @@ interface ParsedReference {
 }
 
 function parseReference(reference: string): ParsedReference {
-  // Match format: "Book Chapter:Verse" e.g., "John 3:16"
   const match = reference
     .trim()
-    .match(/^(.+?)\s+(\d+):(\d+)$/);
+    .match(/^(.+?)\s+(\d+):(\d+)/);
 
   if (!match) {
     throw new Error(`Invalid format. Please use "Book Chapter:Verse" (e.g., "John 3:16")`);
@@ -131,78 +131,233 @@ function parseReference(reference: string): ParsedReference {
 const SUPPORTED_TRANSLATIONS = ['KJV', 'NKJV', 'ESV', 'NIV', 'YLT', 'ASV', 'WEB'];
 
 /**
- * Fetches a single verse from bolls.life API
+ * Fetches a single verse OR verse range from bolls.life API
+ * Automatically detects if it's a range (e.g., "Romans 5:1-2") or single verse
  * 
- * @param reference - The verse reference (e.g., "John 3:16")
- * @param translation - The translation (e.g., "KJV", "NKJV", "ESV", "NIV")
- * @returns The verse text
- * 
- * Example:
- * const verse = await fetchVerse("John 3:16", "KJV");
- * console.log(verse.text); // "For God so loved the world..."
+ * @param reference - The verse reference (e.g., "John 3:16" or "Romans 5:1-2")
+ * @param translation - The translation (e.g., "KJV")
+ * @returns The verse text (concatenated for ranges)
  */
 export async function fetchVerse(
   reference: string,
   translation: string = "KJV"
 ): Promise<BibleApiResult> {
-  const parsed = parseReference(reference);
+  if (__DEV__) console.log(`[BibleAPI] fetchVerse called with reference="${reference}", translation="${translation}"`);
+  
   const code = translation.toUpperCase();
 
-  // Check if translation is supported
   if (!SUPPORTED_TRANSLATIONS.includes(code)) {
     throw new Error(`Translation "${code}" is not supported. Available: ${SUPPORTED_TRANSLATIONS.join(', ')}`);
   }
 
-  // Build the URL: https://bolls.life/get-verse/KJV/43/3/16/
+  // Check if it's a range (e.g., "Romans 5:1-2")
+  const rangeMatch = reference.trim().match(/^(.+?)\s+(\d+):(\d+)-(\d+)$/);
+  
+  if (rangeMatch) {
+    // It's a range - fetch all verses individually
+    if (__DEV__) console.log(`[BibleAPI] Detected verse range, fetching individually`);
+    return fetchVerseRange(reference, translation);
+  }
+
+  // Single verse
+  return fetchSingleVerse(reference, translation);
+}
+
+/**
+ * Fetches a single verse from the API
+ */
+async function fetchSingleVerse(
+  reference: string,
+  translation: string = "KJV"
+): Promise<BibleApiResult> {
+  const code = translation.toUpperCase();
+  const parsed = parseReference(reference);
   const url = `${BASE}/get-verse/${code}/${parsed.bookId}/${parsed.chapter}/${parsed.verse}/`;
+  if (__DEV__) console.log(`[BibleAPI] Fetching URL: ${url}`);
 
   try {
     const response = await fetch(url);
+    if (__DEV__) console.log(`[BibleAPI] Response status: ${response.status}`);
 
     if (!response.ok) {
+      const errorText = await response.text();
+      logError(new Error(`Bible API returned ${response.status}`), {
+        reference,
+        translation: code,
+        body: errorText,
+      });
+      
       if (response.status === 404) {
         throw new Error(`Verse "${parsed.bookDisplay} ${parsed.chapter}:${parsed.verse}" not found in ${code}.`);
       }
-      throw new Error(`HTTP ${response.status}: Failed to fetch verse.`);
+      throw new Error(`HTTP ${response.status}: ${errorText || 'Failed to fetch verse.'}`);
     }
 
     const data = await response.json();
+    if (__DEV__) console.log(`[BibleAPI] Response data keys:`, Object.keys(data));
 
-    // Validate response format
     if (!data || typeof data !== 'object') {
       throw new Error(`Invalid response format for "${reference}" in ${code}.`);
     }
 
-    // Get the verse text - the API returns: { pk, verse, text, comment }
     const verseText = data.text || data.verse_text || data.verse;
     
     if (!verseText || typeof verseText !== 'string' || !verseText.trim()) {
+      logError(new Error("Bible API response had no verse text"), { reference, translation: code });
       throw new Error(`No verse text returned for "${reference}" in ${code}.`);
     }
 
-    return {
+    const result = {
       reference: `${parsed.bookDisplay} ${parsed.chapter}:${parsed.verse}`,
       text: stripHtml(verseText),
       translation: code,
     };
+    
+    if (__DEV__) console.log(`[BibleAPI] Success:`, result.reference);
+    return result;
 
   } catch (error) {
+    // parseReference's validation errors (bad format, unknown book) never
+    // reach this catch — they throw before the try block above — so
+    // everything here is a genuine network/API failure worth tracking.
+    logError(error, { reference, translation: code });
     if (error instanceof Error) {
-      throw new Error(`Failed to fetch verse: ${error.message}`);
+      throw error;
     }
     throw new Error(`Failed to fetch verse: Unknown error`);
   }
 }
 
 /**
- * Validates a reference format
+ * Fetches a range of verses by fetching each verse individually
+ * This is more reliable than the batch endpoint which has inconsistent response formats
+ * 
+ * @param reference - The verse range (e.g., "Romans 5:1-2")
+ * @param translation - The translation (e.g., "KJV")
+ * @returns Concatenated verse text
+ */
+export async function fetchVerseRange(
+  reference: string,
+  translation: string = "KJV"
+): Promise<BibleApiResult> {
+  if (__DEV__) console.log(`[BibleAPI] fetchVerseRange: "${reference}", ${translation}`);
+  
+  const rangeMatch = reference.trim().match(/^(.+?)\s+(\d+):(\d+)-(\d+)$/);
+  
+  if (!rangeMatch) {
+    // Not a range, fall back to single verse
+    return fetchSingleVerse(reference, translation);
+  }
+
+  const [, book, chapter, startVerse, endVerse] = rangeMatch;
+  const code = translation.toUpperCase();
+  
+  if (!SUPPORTED_TRANSLATIONS.includes(code)) {
+    throw new Error(`Translation "${code}" is not supported.`);
+  }
+
+  const normalizedBook = normalizeBookName(book);
+  const bookData = BOOK_LOOKUP[normalizedBook];
+  
+  if (!bookData) {
+    throw new Error(`Unknown book "${book}".`);
+  }
+
+  const start = parseInt(startVerse, 10);
+  const end = parseInt(endVerse, 10);
+  const chapterNum = parseInt(chapter, 10);
+  
+  if (start >= end) {
+    throw new Error(`Invalid verse range: start (${start}) must be less than end (${end}).`);
+  }
+  
+  // Limit range to prevent abuse (max 10 verses per range)
+  if (end - start > 9) {
+    throw new Error(`Verse range too large. Maximum 10 verses allowed per range.`);
+  }
+  
+  if (__DEV__) console.log(`[BibleAPI] Range: ${bookData.display} ${chapterNum}:${start}-${end}`);
+  if (__DEV__) console.log(`[BibleAPI] Fetching ${end - start + 1} verses individually...`);
+  
+  const verseTexts: string[] = [];
+  
+  for (let v = start; v <= end; v++) {
+    try {
+      const singleRef = `${book} ${chapter}:${v}`;
+      if (__DEV__) console.log(`[BibleAPI] Fetching verse ${v}/${end}...`);
+      const result = await fetchSingleVerse(singleRef, translation);
+      verseTexts.push(result.text);
+    } catch (e) {
+      logError(e, { where: "fetchVerseRange", verse: v, reference });
+      // Don't fail the whole range if one verse fails
+      verseTexts.push(`[Verse ${v} unavailable]`);
+    }
+  }
+  
+  // Filter out unavailable verses
+  const validTexts = verseTexts.filter(t => !t.startsWith('[Verse'));
+  
+  if (validTexts.length === 0) {
+    throw new Error(`No verse text returned for range "${reference}" in ${code}.`);
+  }
+  
+  const concatenatedText = verseTexts.join('\n');
+  
+  const result = {
+    reference: `${bookData.display} ${chapterNum}:${start}-${end}`,
+    text: concatenatedText,
+    translation: code,
+  };
+  
+  if (__DEV__) console.log(`[BibleAPI] Range fetch success: ${result.reference} (${validTexts.length}/${verseTexts.length} verses)`);
+  if (__DEV__) console.log(`[BibleAPI] Text preview: "${result.text.substring(0, 100)}..."`);
+  return result;
+}
+
+/**
+ * Validates a reference format (works with both single verses and ranges)
  */
 export function validateReference(reference: string): { 
   valid: boolean; 
   error?: string;
-  parsed?: { book: string; chapter: number; verse: number };
+  parsed?: { book: string; chapter: number; verse: number; endVerse?: number };
 } {
   try {
+    // Check if it's a range
+    const rangeMatch = reference.trim().match(/^(.+?)\s+(\d+):(\d+)-(\d+)$/);
+    
+    if (rangeMatch) {
+      const [, book, chapter, startVerse, endVerse] = rangeMatch;
+      const normalizedBook = normalizeBookName(book);
+      const bookData = BOOK_LOOKUP[normalizedBook];
+      
+      if (!bookData) {
+        return { valid: false, error: `Unknown book "${book.trim()}".` };
+      }
+      
+      const start = parseInt(startVerse, 10);
+      const end = parseInt(endVerse, 10);
+      
+      if (start >= end) {
+        return { valid: false, error: "Start verse must be less than end verse." };
+      }
+      
+      if (end - start > 9) {
+        return { valid: false, error: "Maximum 10 verses per range." };
+      }
+      
+      return {
+        valid: true,
+        parsed: {
+          book: bookData.display,
+          chapter: parseInt(chapter, 10),
+          verse: start,
+          endVerse: end,
+        }
+      };
+    }
+    
+    // Single verse
     const parsed = parseReference(reference);
     return { 
       valid: true, 

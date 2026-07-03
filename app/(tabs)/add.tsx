@@ -10,6 +10,8 @@ import { useAuth } from "@/hooks/useAuth";
 import { useVerses } from "@/hooks/useVerses";
 import { getDefaultReminderInterval } from "@/lib/preferences";
 import { useToast } from "@/lib/toast";
+import { validateReference } from "@/lib/bibleApi";
+import { logError } from "@/lib/monitoring";
 
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { CategoryPill } from "@/components/CategoryPill";
@@ -51,19 +53,39 @@ export default function AddVerseScreen() {
 
   async function handleAdd() {
     const ref = reference.trim();
+    
     if (!ref) {
       toast.showError("Verse Required", "Enter something like John 3:16.");
       return;
     }
 
+    // Validate the reference format first
+    const validation = validateReference(ref);
+    if (!validation.valid) {
+      toast.showError("Invalid Reference", validation.error ?? "Please check the format.");
+      return;
+    }
+
     try {
       setLoading(true);
-      await addVerse({ reference: ref, categoryId, reminderIntervalMinutes: interval, translation });
+      
+      // fetchVerse in bibleApi.ts now automatically handles both single verses
+      // and ranges (e.g., "Romans 5:1-2"). It will:
+      // - Single: fetch one verse -> save as "John 3:16"
+      // - Range: fetch all verses -> concatenate -> save as "Romans 5:1-2"
+      await addVerse({ 
+        reference: ref,  // Pass the reference as-is, whether single or range
+        categoryId, 
+        reminderIntervalMinutes: interval, 
+        translation 
+      });
+      
       toast.showSuccess("Verse Added!", "Your reminder has been scheduled.");
       setReference("");
       setCategoryId(null);
       setInterval(defaultInterval);
     } catch (err: any) {
+      logError(err, { where: "add verse", reference: ref });
       toast.showError("Couldn't Add Verse", err.message ?? "Something went wrong.");
     } finally {
       setLoading(false);
@@ -90,7 +112,13 @@ export default function AddVerseScreen() {
           <Text style={[styles.label, { color: theme.text }]}>Translation</Text>
           <View style={styles.wrap}>
             {TRANSLATIONS.map((item) => (
-              <CategoryPill key={item} label={item} color={theme.accent} selected={translation === item} onPress={() => setTranslation(item)} />
+              <CategoryPill 
+                key={item} 
+                label={item} 
+                color={theme.accent} 
+                selected={translation === item} 
+                onPress={() => setTranslation(item)} 
+              />
             ))}
           </View>
         </View>
@@ -110,7 +138,13 @@ export default function AddVerseScreen() {
           </View>
           <View style={[styles.wrap, { marginTop: 12 }]}>
             {categories.map((category) => (
-              <CategoryPill key={category.id} label={category.name} color={category.color} selected={category.id === categoryId} onPress={() => setCategoryId(category.id)} />
+              <CategoryPill 
+                key={category.id} 
+                label={category.name} 
+                color={category.color} 
+                selected={category.id === categoryId} 
+                onPress={() => setCategoryId(category.id)} 
+              />
             ))}
           </View>
           {categories.length === 0 && (
@@ -125,7 +159,13 @@ export default function AddVerseScreen() {
           <Text style={[styles.label, { color: theme.text }]}>Reminder Interval</Text>
           <View style={styles.wrap}>
             {REMINDER_OPTIONS.map((item) => (
-              <CategoryPill key={item.value} label={item.label} color={theme.accent} selected={interval === item.value} onPress={() => setInterval(item.value)} />
+              <CategoryPill 
+                key={item.value} 
+                label={item.label} 
+                color={theme.accent} 
+                selected={interval === item.value} 
+                onPress={() => setInterval(item.value)} 
+              />
             ))}
           </View>
           <Text style={{ marginTop: 14, color: theme.textSecondary }}>
@@ -133,7 +173,12 @@ export default function AddVerseScreen() {
           </Text>
         </View>
 
-        <PrimaryButton label="Add Verse" onPress={handleAdd} loading={loading} style={{ marginTop: 20 }} />
+        <PrimaryButton 
+          label="Add Verse" 
+          onPress={handleAdd} 
+          loading={loading} 
+          style={{ marginTop: 20 }} 
+        />
       </ScrollView>
 
       <QuickAddCategoryModal

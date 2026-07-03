@@ -13,6 +13,7 @@
 // updates the shared store once, and every mounted tab re-renders
 // immediately with the new data — no manual refresh, no remount needed.
 import { useCallback, useEffect, useRef, useState } from "react";
+import { logMessage } from "@/lib/monitoring";
 import { supabase } from "@/lib/supabase";
 import {
   cacheVerses,
@@ -89,7 +90,9 @@ async function refreshStore(userId: string | null) {
 
     await cacheVerses(freshVerses);
   } catch (error) {
-    console.warn("Offline mode enabled:", error);
+    logMessage("Falling back to cached verses (offline or fetch failed)", {
+      error: error instanceof Error ? error.message : String(error),
+    });
     const cached = await getCachedVerses();
     setStore({ verses: cached, loading: false });
   }

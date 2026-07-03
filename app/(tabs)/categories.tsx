@@ -18,6 +18,7 @@ import { useTheme, type } from "@/theme";
 import { useAuth } from "@/hooks/useAuth";
 import { useVerses } from "@/hooks/useVerses";
 import { useToast } from "@/lib/toast";
+import { logError } from "@/lib/monitoring";
 
 import { EmptyState } from "@/components/EmptyState";
 import { PrimaryButton } from "@/components/PrimaryButton";
@@ -138,6 +139,7 @@ export default function CategoriesScreen() {
       setName("");
       setColor(COLORS[0]);
     } catch (e: any) {
+      logError(e, { where: "add category", name: name.trim() });
       toast.showError("Error", e.message ?? "Something went wrong.");
     } finally {
       setCreating(false);

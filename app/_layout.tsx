@@ -21,6 +21,7 @@ import {
 
 import { initDb } from "@/lib/db";
 import { ensureNotificationPermission } from "@/lib/notifications";
+import { initMonitoring, Sentry, logError } from "@/lib/monitoring";
 import { useAuth } from "@/hooks/useAuth";
 import { ThemeProvider } from "@/theme";
 import { ToastProvider } from "@/lib/toast";
@@ -30,9 +31,11 @@ import {
   markOnboardingComplete,
 } from "@/lib/onboarding";
 import { OnboardingScreen } from "@/components/OnboardingScreen";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import AppSplashScreen from "./splash";
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
+initMonitoring();
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -44,7 +47,7 @@ Notifications.setNotificationHandler({
   }),
 });
 
-export default function RootLayout() {
+function RootLayout() {
   const router = useRouter();
   const segments = useSegments();
   const { session, loading } = useAuth();
@@ -62,10 +65,14 @@ export default function RootLayout() {
     Inter_700Bold,
   });
 
-  // Deep-link logging only.
-  // Supabase handles OAuth automatically because
-  // detectSessionInUrl is true.
+  // Deep-link logging only, dev builds — actual OAuth/reset-link handling
+  // happens on the dedicated auth-callback and reset-password screens,
+  // which read the incoming URL's params directly (detectSessionInUrl is
+  // deliberately false in src/lib/supabase.ts, since that option has no
+  // effect outside a browser).
   useEffect(() => {
+    if (!__DEV__) return;
+
     const sub = Linking.addEventListener("url", ({ url }) => {
       console.log("Deep link:", url);
     });
@@ -109,7 +116,7 @@ export default function RootLayout() {
           setShowOnboarding(true);
         }
       } catch (e) {
-        console.error(e);
+        logError(e, { where: "app initialization" });
       } finally {
         setAppReady(true);
       }
@@ -126,13 +133,17 @@ export default function RootLayout() {
     SplashScreen.hideAsync().catch(() => {});
 
     const inAuth = segments[0] === "(auth)";
+    // reset-password and auth-callback are reached via a deep link before
+    // a session exists (the token exchange on those screens is what
+    // creates the session), so they must be treated as public routes just
+    // like the (auth) group — otherwise this guard boots the user back to
+    // sign-in before the screen can process the link.
+    const isPublicRoute =
+      inAuth ||
+      segments[0] === "reset-password" ||
+      segments[0] === "auth-callback";
 
-    console.log("Navigation:", {
-      session: !!session,
-      inAuth,
-    });
-
-    if (!session && !inAuth) {
+    if (!session && !isPublicRoute) {
       router.replace("/(auth)/sign-in");
       return;
     }
@@ -201,9 +212,23 @@ export default function RootLayout() {
               name="reset-password"
               options={{ presentation: "modal" }}
             />
+            <Stack.Screen
+              name="auth-callback"
+              options={{ presentation: "modal", gestureEnabled: false }}
+            />
           </Stack>
         </TabNavigationProvider>
       </ToastProvider>
     </ThemeProvider>
   );
 }
+
+function AppRoot() {
+  return (
+    <ErrorBoundary>
+      <RootLayout />
+    </ErrorBoundary>
+  );
+}
+
+export default Sentry.wrap(AppRoot);

@@ -7,11 +7,12 @@ import { Ionicons } from "@expo/vector-icons";
 import * as Clipboard from 'expo-clipboard';
 import { useTheme, type } from "@/theme";
 import { useToast } from "@/lib/toast";
+import { logError } from "@/lib/monitoring";
 
 const ACCOUNTS = [
-  { bank: "Stanbic IBTC Bank", name: "Adeyoju Ibukunoluwa Joel", number: "0034563949" },
-  { bank: "Opay", name: "Adeyoju Ibukunoluwa Joel", number: "8058509717" },
-  { bank: "Palmpay", name: "Adeyoju Ibukunoluwa Joel", number: "8058509717" },
+  { bank: "Stanbic IBTC Bank", name: "Adeyoju Ibukunoluwa Joel", number: "0034563949", id: "1" },
+  { bank: "Opay", name: "Adeyoju Ibukunoluwa Joel", number: "8058509717", id: "2" },
+  { bank: "Palmpay", name: "Adeyoju Ibukunoluwa Joel", number: "8058509717", id: "3" },
 ];
 
 export default function DonateScreen() {
@@ -20,8 +21,13 @@ export default function DonateScreen() {
   const toast = useToast();
 
   async function copy(text: string) {
-    await Clipboard.setStringAsync(text);
-    toast.showSuccess("Copied!", "Account number copied to clipboard.");
+    try {
+      await Clipboard.setStringAsync(text);
+      toast.showSuccess("Copied", "Account number copied to clipboard.");
+    } catch (e) {
+      logError(e, { where: "donate: copy account number" });
+      toast.showError("Couldn't Copy", "Please try copying manually.");
+    }
   }
 
   return (
@@ -48,7 +54,7 @@ export default function DonateScreen() {
         </Text>
 
         {ACCOUNTS.map((acc) => (
-          <View key={acc.number} style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+          <View key={acc.id} style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
             <Text style={[styles.bankName, { color: theme.accent }]}>{acc.bank}</Text>
             <Text style={[{ color: theme.text, fontWeight: "600", marginTop: 4 }]}>{acc.name}</Text>
             <View style={styles.accountRow}>

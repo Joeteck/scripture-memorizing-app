@@ -65,7 +65,7 @@ export function AvatarButton({ initials, avatarIndex = 0, onPress, size = 52 }: 
         {/* Glass overlay */}
         <View
           style={[
-            StyleSheet.absoluteFillObject,
+            StyleSheet.absoluteFill,
             {
               borderRadius,
               backgroundColor: "rgba(255,255,255,0.12)",

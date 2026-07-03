@@ -1,11 +1,10 @@
 // src/components/SmartReferenceInput.tsx
-// Smart Bible reference input: book autocomplete + space-separated chapter/verse
+// Smart Bible reference input: book autocomplete + intelligent formatting
 import React, { useRef, useState } from "react";
 import {
   FlatList,
   Pressable,
   StyleSheet,
-  Switch,
   Text,
   TextInput,
   View,
@@ -26,46 +25,11 @@ const BOOKS = [
 ];
 
 type InputMode = "single" | "multi";
-type ParseState = "book" | "chapter" | "verse_start" | "verse_end";
 
 interface Props {
   value: string;
   onChange: (ref: string) => void;
   onModeChange?: (mode: InputMode) => void;
-}
-
-function parseInputState(raw: string): ParseState {
-  const parts = raw.trim().split(/\s+/);
-  // Is the first part a known book?
-  const book = BOOKS.find((b) => b.toLowerCase() === parts[0]?.toLowerCase());
-  if (!book) return "book";
-  if (parts.length < 2) return "chapter";
-  if (parts.length < 3) return "verse_start";
-  return "verse_end";
-}
-
-function buildReference(raw: string, mode: InputMode): string {
-  const parts = raw.trim().split(/\s+/);
-  if (parts.length < 3) return raw;
-  // Last 1 or 2 items are numbers (chapter then verse)
-  const nums = parts.slice(-2);
-  const bookParts = parts.slice(0, -2);
-  const chapter = nums[0];
-  const verse = nums[1];
-  if (!chapter || !verse) return raw;
-
-  if (mode === "single") {
-    return `${bookParts.join(" ")} ${chapter}:${verse}`;
-  }
-
-  // multi: last two numbers are start_verse end_verse
-  const partsMulti = raw.trim().split(/\s+/);
-  if (partsMulti.length < 4) return raw;
-  const end = partsMulti[partsMulti.length - 1];
-  const start = partsMulti[partsMulti.length - 2];
-  const ch = partsMulti[partsMulti.length - 3];
-  const bookM = partsMulti.slice(0, -3).join(" ");
-  return `${bookM} ${ch}:${start}-${end}`;
 }
 
 export function SmartReferenceInput({ value, onChange, onModeChange }: Props) {
@@ -77,34 +41,111 @@ export function SmartReferenceInput({ value, onChange, onModeChange }: Props) {
   const [suggestions, setSuggestions] = useState<string[]>([]);
 
   function handleText(text: string) {
-    setRaw(text);
-    onChange(text);
+    // Don't process if text hasn't changed
+    if (text === raw) return;
 
-    if (bookChosen) {
-      setSuggestions([]);
-      // Auto-format on completion
-      const state = parseInputState(text);
-      if (mode === "single" && state === "verse_end") {
-        const formatted = buildReference(text, "single");
-        setRaw(formatted);
-        onChange(formatted);
+    // Handle backspace/deletion - just update raw
+    if (text.length < raw.length) {
+      setRaw(text);
+      onChange(text);
+      
+      // Check if we've deleted back to book-only
+      const parts = text.trim().split(/\s+/);
+      if (parts.length <= 1) {
+        setBookChosen(false);
+        // Show suggestions if user is typing a book
+        const lower = text.toLowerCase();
+        if (!lower) { 
+          setSuggestions([]); 
+          return; 
+        }
+        const matches = BOOKS.filter((b) => b.toLowerCase().startsWith(lower)).slice(0, 7);
+        setSuggestions(matches);
+      } else {
+        setSuggestions([]);
       }
-      if (mode === "multi") {
-        const parts = text.trim().split(/\s+/);
-        if (parts.length >= 4) {
-          const formatted = buildReference(text, "multi");
-          setRaw(formatted);
-          onChange(formatted);
+      return;
+    }
+
+    // If we haven't chosen a book yet, handle book selection
+    if (!bookChosen) {
+      setRaw(text);
+      onChange(text);
+      
+      const lower = text.toLowerCase();
+      if (!lower) { 
+        setSuggestions([]); 
+        return; 
+      }
+      const matches = BOOKS.filter((b) => b.toLowerCase().startsWith(lower)).slice(0, 7);
+      setSuggestions(matches);
+      
+      // Check if user typed a complete book name followed by space
+      const spaceIndex = text.indexOf(' ');
+      if (spaceIndex > 0) {
+        const potentialBook = text.substring(0, spaceIndex).trim();
+        const isBook = BOOKS.some(b => b.toLowerCase() === potentialBook.toLowerCase());
+        if (isBook) {
+          setBookChosen(true);
+          setSuggestions([]);
+          onChange(text); // Keep the text as is with space
         }
       }
       return;
     }
 
-    // Book suggestion phase
-    const lower = text.toLowerCase();
-    if (!lower) { setSuggestions([]); return; }
-    const matches = BOOKS.filter((b) => b.toLowerCase().startsWith(lower)).slice(0, 7);
-    setSuggestions(matches);
+    // Book is chosen, now handle chapter:verse formatting
+    setSuggestions([]);
+    
+    // Find the book part (everything before the numbers)
+    const bookMatch = text.match(/^(.+?)\s+(\d+.*)/);
+    if (!bookMatch) {
+      setRaw(text);
+      onChange(text);
+      return;
+    }
+
+    const bookPart = bookMatch[1];
+    const numbersPart = bookMatch[2];
+
+    // Parse the numbers part based on mode
+    if (mode === "single") {
+      let formatted = numbersPart;
+      
+      // Auto-insert colon after chapter number + space (before typing verse)
+      // Handle "chapter " -> "chapter:" (colon appears immediately after space)
+      if (/^\d+\s$/.test(formatted)) {
+        formatted = formatted.replace(/\s$/, ':');
+      }
+      // Handle "chapter:verse" -> keep as is
+      // Replace "chapter space verse" with "chapter:verse"
+      formatted = formatted.replace(/^(\d+)\s+(\d+)$/, '$1:$2');
+      
+      const newText = bookPart + " " + formatted;
+      setRaw(newText);
+      onChange(newText);
+    } else {
+      // Multi mode
+      let formatted = numbersPart;
+      
+      // Auto-insert colon after chapter number + space
+      if (/^\d+\s$/.test(formatted)) {
+        formatted = formatted.replace(/\s$/, ':');
+      }
+      // Handle "chapter:verse " -> "chapter:verse-" (dash appears immediately after space)
+      else if (/^\d+:\d+\s$/.test(formatted)) {
+        formatted = formatted.replace(/\s$/, '-');
+      }
+      // Handle "chapter verse1 verse2" -> "chapter:verse1-verse2"
+      formatted = formatted.replace(/^(\d+)\s+(\d+)\s+(\d+)$/, '$1:$2-$3');
+      // Handle "chapter:verse1 verse2" -> "chapter:verse1-verse2"
+      formatted = formatted.replace(/^(\d+):(\d+)\s+(\d+)$/, '$1:$2-$3');
+      // Handle "chapter:verse1-" -> keep as is (ready for last verse)
+      
+      const newText = bookPart + " " + formatted;
+      setRaw(newText);
+      onChange(newText);
+    }
   }
 
   function selectBook(book: string) {
@@ -126,12 +167,31 @@ export function SmartReferenceInput({ value, onChange, onModeChange }: Props) {
     onModeChange?.(next);
   }
 
-  const parseState = parseInputState(raw);
-  const placeholder =
-    !bookChosen ? "Type a book name…" :
-    parseState === "chapter" ? "Chapter number" :
-    parseState === "verse_start" ? mode === "single" ? "Verse number" : "Starting verse" :
-    "Ending verse";
+  // Determine placeholder based on current state
+  function getPlaceholder(): string {
+    if (!bookChosen) return "Type a book name…";
+    
+    const parts = raw.trim().split(/\s+/);
+    if (parts.length <= 1) return "Chapter number";
+    
+    if (mode === "single") {
+      if (!raw.includes(":")) return "Chapter:Verse (type chapter then space)";
+      const afterColon = raw.split(":")[1];
+      if (!afterColon || afterColon === "") return "Verse number";
+      return "Reference complete";
+    } else {
+      // Multi mode
+      if (!raw.includes(":")) return "Chapter number";
+      const colonParts = raw.split(":");
+      if (colonParts.length < 2) return "Chapter number";
+      const afterColon = colonParts[1];
+      if (!afterColon || afterColon === "") return "Starting verse";
+      if (!afterColon.includes("-")) return "Starting verse (then space for dash)";
+      const dashParts = afterColon.split("-");
+      if (dashParts.length < 2 || dashParts[1] === "") return "Ending verse";
+      return "Reference complete";
+    }
+  }
 
   return (
     <View>
@@ -152,7 +212,7 @@ export function SmartReferenceInput({ value, onChange, onModeChange }: Props) {
         >
           <Ionicons name="layers-outline" size={14} color={mode === "multi" ? "#fff" : theme.accent} />
           <Text style={[styles.modeText, { color: mode === "multi" ? "#fff" : theme.accent }]}>
-            {" "}Multi (max 3)
+            {" "}Multi
           </Text>
         </Pressable>
       </View>
@@ -164,7 +224,7 @@ export function SmartReferenceInput({ value, onChange, onModeChange }: Props) {
           ref={inputRef}
           value={raw}
           onChangeText={handleText}
-          placeholder={placeholder}
+          placeholder={getPlaceholder()}
           placeholderTextColor={theme.textSecondary}
           style={[styles.input, { color: theme.text }]}
           autoCorrect={false}
@@ -172,7 +232,12 @@ export function SmartReferenceInput({ value, onChange, onModeChange }: Props) {
           returnKeyType="done"
         />
         {raw.length > 0 && (
-          <Pressable hitSlop={8} onPress={() => { setRaw(""); onChange(""); setBookChosen(false); setSuggestions([]); }}>
+          <Pressable hitSlop={8} onPress={() => { 
+            setRaw(""); 
+            onChange(""); 
+            setBookChosen(false); 
+            setSuggestions([]); 
+          }}>
             <Ionicons name="close-circle" size={18} color={theme.textSecondary} />
           </Pressable>
         )}
@@ -198,8 +263,8 @@ export function SmartReferenceInput({ value, onChange, onModeChange }: Props) {
       {bookChosen && (
         <Text style={[styles.hint, { color: theme.textSecondary }]}>
           {mode === "single"
-            ? "Type: chapter Space verse  e.g. 3 16"
-            : "Type: chapter Space verse1 Space verse2  e.g. 3 16 18"}
+            ? "Type chapter number, space, then verse number"
+            : "Type chapter, space, verse1, space, verse2"}
         </Text>
       )}
     </View>
