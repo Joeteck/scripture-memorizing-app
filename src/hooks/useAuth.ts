@@ -10,6 +10,7 @@ import {
   signOut,
   signInWithGoogle,
   resetPassword,
+  deleteAccount,
 } from "@/lib/auth";
 
 export function useAuth() {
@@ -87,5 +88,7 @@ export function useAuth() {
     signInWithGoogle,
 
     resetPassword,
+
+    deleteAccount,
   };
 }

@@ -331,6 +331,19 @@ export default function SignIn() {
             {mode === "signin" ? "Don't have an account? Sign Up" : "Already have an account? Sign In"}
           </Text>
         </Pressable>
+
+        {/* Terms & privacy consent */}
+        <Text style={[styles.consentText, { color: theme.textSecondary }]}>
+          By continuing, you agree to our{" "}
+          <Text style={{ color: theme.accent, fontWeight: "600" }} onPress={() => router.push("/terms")}>
+            Terms of Service
+          </Text>{" "}
+          and{" "}
+          <Text style={{ color: theme.accent, fontWeight: "600" }} onPress={() => router.push("/privacy-policy")}>
+            Privacy Policy
+          </Text>
+          .
+        </Text>
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -384,4 +397,5 @@ const styles = StyleSheet.create({
   },
   googleText: { fontSize: 16, fontWeight: "600" },
   googleSubText: { fontSize: 12, marginTop: 2 },
+  consentText: { fontSize: 12, lineHeight: 18, textAlign: "center", marginTop: 24, paddingHorizontal: 8 },
 });

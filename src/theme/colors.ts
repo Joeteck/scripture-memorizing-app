@@ -78,6 +78,9 @@ export const darkTheme = {
   accentSoft: "#262C44",
   mastered: palette.amber500,
   masteredSoft: "#3A2E1C",
+  error: "#E0645C",
+  errorSoft: "#4A2624",
+  errorSurface: "#3A1F1D",
   shadows,
 };
 

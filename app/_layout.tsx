@@ -140,7 +140,9 @@ function RootLayout() {
     const isPublicRoute =
       inAuth ||
       segments[0] === "reset-password" ||
-      segments[0] === "auth-callback";
+      segments[0] === "auth-callback" ||
+      segments[0] === "privacy-policy" ||
+      segments[0] === "terms";
 
     if (!session && !isPublicRoute) {
       router.replace("/(auth)/sign-in");
@@ -209,6 +211,14 @@ function RootLayout() {
             />
             <Stack.Screen
               name="reset-password"
+              options={{ presentation: "modal" }}
+            />
+            <Stack.Screen
+              name="privacy-policy"
+              options={{ presentation: "modal" }}
+            />
+            <Stack.Screen
+              name="terms"
               options={{ presentation: "modal" }}
             />
             <Stack.Screen

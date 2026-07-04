@@ -93,3 +93,26 @@ export async function getSession() {
 export async function getUser() {
   return supabase.auth.getUser();
 }
+
+/**
+ * Permanently deletes the signed-in user's account and all their data.
+ *
+ * This can't be done directly from the client — deleting an auth user
+ * requires Supabase's service_role key, which must never ship inside the
+ * app. Instead this calls the `delete-account` Edge Function (see
+ * supabase/functions/delete-account/index.ts), which runs server-side
+ * with that key, verifies the caller's own session token, and deletes
+ * only that user. Deleting the auth user cascades to their `verses`,
+ * `categories`, and `profiles` rows (all set up with `on delete cascade`
+ * in supabase/schema.sql); `feedback` and `error_logs` rows are kept but
+ * anonymized (`on delete set null`), since those are useful for
+ * debugging independent of who filed them.
+ *
+ * Requires the Edge Function to be deployed once via the Supabase CLI —
+ * see PRODUCTION_AUDIT_REPORT.md for the one-time setup steps.
+ */
+export async function deleteAccount() {
+  const { data, error } = await supabase.functions.invoke("delete-account");
+  if (error) throw error;
+  return data;
+}

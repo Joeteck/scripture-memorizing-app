@@ -29,12 +29,13 @@ const APPEARANCE_OPTIONS = [
 export default function ProfileScreen() {
   const theme = useTheme();
   const router = useRouter();
-  const { user, signOut, resetPassword } = useAuth();
+  const { user, signOut, resetPassword, deleteAccount } = useAuth();
   const { mode, setMode } = useThemeMode();
 
   const [defaultInterval, setDefaultIntervalState] = useState(60);
   const [sendingReset, setSendingReset] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
+  const [deletingAccount, setDeletingAccount] = useState(false);
 
   useEffect(() => {
     getDefaultReminderInterval().then(setDefaultIntervalState);
@@ -82,6 +83,50 @@ export default function ProfileScreen() {
         },
       },
     ]);
+  }
+
+  function handleDeleteAccount() {
+    Alert.alert(
+      "Delete Account?",
+      "This permanently deletes your account, verses, and categories. This can't be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Continue",
+          style: "destructive",
+          onPress: () => {
+            // Second confirmation, deliberately — this is irreversible and
+            // easy to tap by accident on the first alert.
+            Alert.alert(
+              "Are you absolutely sure?",
+              "There is no way to recover your account or data after this.",
+              [
+                { text: "Cancel", style: "cancel" },
+                {
+                  text: "Delete My Account",
+                  style: "destructive",
+                  onPress: async () => {
+                    try {
+                      setDeletingAccount(true);
+                      await deleteAccount();
+                      await signOut();
+                      // app/_layout.tsx's session listener handles the redirect to sign-in.
+                    } catch (e: any) {
+                      setDeletingAccount(false);
+                      logError(e, { where: "profile: delete account" });
+                      Alert.alert(
+                        "Couldn't delete account",
+                        e.message ?? "Something went wrong. Please try again, or contact support."
+                      );
+                    }
+                  },
+                },
+              ]
+            );
+          },
+        },
+      ]
+    );
   }
 
   return (
@@ -179,6 +224,56 @@ export default function ProfileScreen() {
           icon="log-out-outline"
           style={{ marginTop: spacing.lg }}
         />
+
+        {/* Legal */}
+        <Text style={[type.sectionLabel, { color: theme.textSecondary, marginTop: spacing.xl }]}>
+          LEGAL
+        </Text>
+        <View style={[styles.card, { backgroundColor: theme.surface }]}>
+          <Pressable
+            onPress={() => router.push("/privacy-policy")}
+            style={styles.actionRow}
+          >
+            <Ionicons name="shield-checkmark-outline" size={20} color={theme.text} />
+            <Text style={[type.body, { color: theme.text, marginLeft: spacing.sm, flex: 1 }]}>
+              Privacy Policy
+            </Text>
+            <Ionicons name="chevron-forward" size={18} color={theme.textSecondary} />
+          </Pressable>
+          <Pressable
+            onPress={() => router.push("/terms")}
+            style={[styles.actionRow, { marginTop: 4 }]}
+          >
+            <Ionicons name="document-outline" size={20} color={theme.text} />
+            <Text style={[type.body, { color: theme.text, marginLeft: spacing.sm, flex: 1 }]}>
+              Terms of Service
+            </Text>
+            <Ionicons name="chevron-forward" size={18} color={theme.textSecondary} />
+          </Pressable>
+        </View>
+
+        {/* Danger zone */}
+        <Text style={[type.sectionLabel, { color: theme.error, marginTop: spacing.xl }]}>
+          DANGER ZONE
+        </Text>
+        <View style={[styles.card, { backgroundColor: theme.errorSurface, borderWidth: 1, borderColor: theme.errorSoft }]}>
+          <Pressable
+            onPress={handleDeleteAccount}
+            disabled={deletingAccount}
+            style={[styles.actionRow, { opacity: deletingAccount ? 0.6 : 1 }]}
+          >
+            <Ionicons name="trash-outline" size={20} color={theme.error} />
+            <Text style={[type.body, { color: theme.error, marginLeft: spacing.sm, flex: 1, fontWeight: "700" }]}>
+              {deletingAccount ? "Deleting account…" : "Delete Account"}
+            </Text>
+            {deletingAccount ? null : (
+              <Ionicons name="chevron-forward" size={18} color={theme.error} />
+            )}
+          </Pressable>
+        </View>
+        <Text style={[type.caption, { color: theme.textSecondary, marginTop: 8, paddingHorizontal: 4 }]}>
+          Permanently deletes your account, verses, and categories. This can't be undone.
+        </Text>
 
         {/* About */}
         <View style={styles.aboutWrap}>
