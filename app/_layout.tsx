@@ -5,7 +5,7 @@ import * as SplashScreen from "expo-splash-screen";
 import * as Notifications from "expo-notifications";
 import * as Linking from "expo-linking";
 import { useFonts } from "expo-font";
-import { Platform } from "react-native";
+import { Platform, View, Text, StyleSheet } from "react-native";
 
 import {
   Lora_400Regular,
@@ -23,7 +23,7 @@ import { initDb } from "@/lib/db";
 import { ensureNotificationPermission } from "@/lib/notifications";
 import { initMonitoring, logError } from "@/lib/monitoring";
 import { useAuth } from "@/hooks/useAuth";
-import { ThemeProvider } from "@/theme";
+import { ThemeProvider, useTheme } from "@/theme";
 import { ToastProvider } from "@/lib/toast";
 import { TabNavigationProvider } from "@/lib/tabNavigation";
 import {
@@ -32,6 +32,7 @@ import {
 } from "@/lib/onboarding";
 import { OnboardingScreen } from "@/components/OnboardingScreen";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { SUPABASE_CONFIGURED } from "@/lib/supabase";
 import AppSplashScreen from "./splash";
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -45,6 +46,31 @@ Notifications.setNotificationHandler({
     shouldShowList: true,
   }),
 });
+
+/**
+ * Shown instead of the normal app when EXPO_PUBLIC_SUPABASE_URL /
+ * EXPO_PUBLIC_SUPABASE_ANON_KEY were missing at build time. This is a
+ * build-configuration problem, not something a restart or reinstall
+ * fixes — the message says so plainly rather than looking like a normal
+ * error the user could work around.
+ */
+function ConfigErrorScreen() {
+  const theme = useTheme();
+
+  return (
+    <View style={[styles.configError, { backgroundColor: theme.background }]}>
+      <Text style={[styles.configErrorTitle, { color: theme.error }]}>
+        App Isn't Configured
+      </Text>
+      <Text style={[styles.configErrorBody, { color: theme.textSecondary }]}>
+        This build is missing required configuration (Supabase URL/key) and can't connect to its
+        backend. This isn't something you can fix by restarting — it needs to be corrected in the
+        build itself. If you're the developer: check that EXPO_PUBLIC_SUPABASE_URL and
+        EXPO_PUBLIC_SUPABASE_ANON_KEY are set as EAS environment variables for this build profile.
+      </Text>
+    </View>
+  );
+}
 
 function RootLayout() {
   const router = useRouter();
@@ -63,6 +89,15 @@ function RootLayout() {
     Inter_600SemiBold,
     Inter_700Bold,
   });
+
+  // If required env vars weren't present at build time, don't wait on the
+  // rest of the init sequence — hide the splash and show a clear message
+  // right away. See src/lib/supabase.ts for why this can't just throw.
+  useEffect(() => {
+    if (!SUPABASE_CONFIGURED) {
+      SplashScreen.hideAsync().catch(() => {});
+    }
+  }, []);
 
   // Deep-link logging only, dev builds — actual OAuth/reset-link handling
   // happens on the dedicated auth-callback and reset-password screens,
@@ -161,6 +196,16 @@ function RootLayout() {
     showOnboarding,
   ]);
 
+  if (!SUPABASE_CONFIGURED) {
+    return (
+      <ThemeProvider>
+        <ToastProvider>
+          <ConfigErrorScreen />
+        </ToastProvider>
+      </ThemeProvider>
+    );
+  }
+
   if (!fontsLoaded || loading || !appReady) {
     return (
       <ThemeProvider>
@@ -241,3 +286,23 @@ function AppRoot() {
 }
 
 export default AppRoot;
+
+const styles = StyleSheet.create({
+  configError: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 32,
+  },
+  configErrorTitle: {
+    fontSize: 20,
+    fontWeight: "800",
+    marginBottom: 12,
+    textAlign: "center",
+  },
+  configErrorBody: {
+    fontSize: 14,
+    lineHeight: 21,
+    textAlign: "center",
+  },
+});

@@ -13,18 +13,9 @@ import { useTheme, type, spacing } from "@/theme";
 const DEVELOPER = {
   name: "Adeyoju Ibukunoluwa Joel",
   role: "Developer",
-  bio: `Hi, I'm Joel Adeyoju—a software engineer and lifelong learner with a passion for building technology that makes a meaningful difference.
-
-  I created this Scripture Memorization app from a simple conviction: God's Word is meant to be hidden in our hearts, not just stored on our devices. In a world filled with constant distractions, I wanted to build a tool that helps believers memorize, meditate on, and live out Scripture in a practical and engaging way.
-
-  My goal is to combine thoughtful technology with timeless biblical principles to create experiences that encourage spiritual growth. Whether you're memorizing your first verse or building a lifelong habit of studying God's Word, I hope this app becomes a faithful companion on your journey.
-
-  Thank you for being part of this community. I pray this app helps you grow deeper in your knowledge of God and strengthens your walk with Christ.
-
-  "I have hidden your word in my heart that I might not sin against you." — Psalm 119:11`,
-  email: "adeyojuibukunoluwa1@gmail.com",
-  website: "https://myportfolio24-drab.vercel.app/portfolio/about",
-  github: "https://github.com/joeteck"
+  bio: "Placeholder — add a short note about yourself here (e.g. your background, why you built this app, or what you're working on next).",
+  email: "", // e.g. "you@example.com" — leave blank to hide the row
+  website: "", // e.g. "https://yourname.dev" — leave blank to hide the row
 };
 
 const FEATURES: { icon: keyof typeof Ionicons.glyphMap; text: string }[] = [
@@ -160,15 +151,9 @@ export default function AboutScreen() {
               <Text style={[styles.linkText, { color: theme.accent }]}>{DEVELOPER.website}</Text>
             </Pressable>
           ) : null}
-          {DEVELOPER.github ? (
-            <Pressable style={styles.linkRow} onPress={() => RNLinking.openURL(DEVELOPER.github)}>
-              <Ionicons name="logo-github" size={18} color={theme.accent} />
-              <Text style={[styles.linkText, { color: theme.accent }]}>{DEVELOPER.github}</Text>
-            </Pressable>
-          ) : null}
         </Section>
 
-                {/* Legal */}
+        {/* Legal */}
         <Section icon="document-text-outline" title="Legal" theme={theme}>
           <Pressable style={styles.linkRow} onPress={() => router.push("/privacy-policy")}>
             <Ionicons name="shield-checkmark-outline" size={18} color={theme.accent} />

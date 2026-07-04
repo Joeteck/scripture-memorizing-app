@@ -15,7 +15,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useTheme, type, spacing } from "@/theme";
 
 // Fill in before shipping — used at the bottom of both legal screens.
-const CONTACT_EMAIL = "adeyojuibukunoluwa1@gmail.com"; // e.g. "you@example.com"
+const CONTACT_EMAIL = ""; // e.g. "you@example.com"
 const LAST_UPDATED = "July 2026";
 
 function Section({
@@ -150,7 +150,7 @@ export default function PrivacyPolicyScreen() {
             </Pressable>
           ) : (
             <Text style={[styles.body, { color: theme.textSecondary, fontStyle: "italic" }]}>
-              adeyojuibukunoluwa1@gmail.com
+              (Add a contact email in app/privacy-policy.tsx before publishing.)
             </Text>
           )}
         </Section>
