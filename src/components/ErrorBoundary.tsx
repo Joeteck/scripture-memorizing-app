@@ -1,12 +1,13 @@
 // src/components/ErrorBoundary.tsx
-// Catches render-time errors anywhere below it in the tree, reports them
-// to Sentry, and shows a calm, on-brand fallback instead of a white
-// screen or a raw crash. Must be a class component — React only
-// supports error boundaries via componentDidCatch/getDerivedStateFromError.
+// Catches render-time errors anywhere below it in the tree, records them
+// as fatal in the local error log (synced to Supabase's error_logs table
+// — see src/lib/monitoring.ts), and shows a calm, on-brand fallback
+// instead of a white screen or a raw crash. Must be a class component —
+// React only supports error boundaries via componentDidCatch/getDerivedStateFromError.
 import React from "react";
 import { View, Text, StyleSheet, Pressable } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { logError } from "@/lib/monitoring";
+import { logFatal } from "@/lib/monitoring";
 
 interface Props {
   children: React.ReactNode;
@@ -35,7 +36,7 @@ export class ErrorBoundary extends React.Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: React.ErrorInfo) {
-    logError(error, { componentStack: info.componentStack });
+    logFatal(error, { componentStack: info.componentStack });
   }
 
   handleReset = () => {

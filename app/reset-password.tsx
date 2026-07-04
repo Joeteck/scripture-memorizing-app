@@ -24,7 +24,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { supabase } from "@/lib/supabase";
 import { useTheme, type } from "@/theme";
 import { PrimaryButton } from "@/components/PrimaryButton";
-import { logError } from "@/lib/monitoring";
+import { logError, logMessage } from "@/lib/monitoring";
 
 export default function ResetPasswordScreen() {
   const theme = useTheme();
@@ -54,6 +54,15 @@ export default function ResetPasswordScreen() {
       // Supabase can also redirect here with an error (e.g. expired link)
       // instead of a token, surfaced as ?error=...&error_description=...
       if (params.error) {
+        // Check the error_logs table for this — it's the fastest way to
+        // tell "link expired/already used" apart from "redirect URL not
+        // in Supabase's allow list" (which shows up as a generic error
+        // here rather than a proper code/token).
+        logMessage("Password reset redirect returned an error", {
+          where: "reset-password",
+          error: params.error,
+          error_description: params.error_description,
+        });
         setError(params.error_description || "This link has expired. Please request a new password reset.");
         setChecking(false);
         return;
@@ -74,6 +83,15 @@ export default function ResetPasswordScreen() {
           if (error) throw error;
           setSessionReady(true);
         } else {
+          // Landed on this screen with neither a code, tokens, nor an
+          // error — usually means the reset email's link redirected here
+          // without Supabase attaching anything, which points at the
+          // email template's redirect not matching what resetPassword()
+          // requested. Worth having in error_logs since it's easy to
+          // miss otherwise.
+          logMessage("Reset-password screen opened with no code/token/error params", {
+            where: "reset-password",
+          });
           setError("Invalid or expired reset link. Please request a new one.");
         }
       } catch (e: any) {

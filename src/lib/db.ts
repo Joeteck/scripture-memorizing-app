@@ -56,7 +56,101 @@ export async function initDb() {
         verse_id TEXT PRIMARY KEY,
         notification_id TEXT NOT NULL
       );
+
+      CREATE TABLE IF NOT EXISTS error_log_queue (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        severity TEXT NOT NULL,
+        message TEXT NOT NULL,
+        stack TEXT,
+        context TEXT,
+        created_at TEXT NOT NULL
+      );
     `);
+  });
+}
+
+/**
+ * Local, on-device error log queue. This is the durability layer behind
+ * src/lib/monitoring.ts: every error is written here first (so it survives
+ * even if the device is offline or the Supabase insert fails), then
+ * monitoring.ts tries to sync rows to Supabase and deletes them locally
+ * once that succeeds. Capped at MAX_ERROR_LOG_ROWS so a device that's
+ * offline for a long time doesn't grow this table forever.
+ */
+const MAX_ERROR_LOG_ROWS = 300;
+
+export interface LocalErrorLogRow {
+  id: number;
+  severity: string;
+  message: string;
+  stack: string | null;
+  context: string | null;
+  created_at: string;
+}
+
+export async function queueErrorLog(row: {
+  severity: string;
+  message: string;
+  stack?: string | null;
+  context?: string | null;
+}) {
+  return enqueue(async () => {
+    const db = await getDatabase();
+
+    await db.runAsync(
+      `
+      INSERT INTO error_log_queue
+      (severity,message,stack,context,created_at)
+      VALUES(?,?,?,?,?)
+      `,
+      [
+        row.severity,
+        row.message,
+        row.stack ?? null,
+        row.context ?? null,
+        new Date().toISOString(),
+      ]
+    );
+
+    await db.runAsync(
+      `
+      DELETE FROM error_log_queue
+      WHERE id NOT IN (
+        SELECT id FROM error_log_queue ORDER BY id DESC LIMIT ?
+      )
+      `,
+      [MAX_ERROR_LOG_ROWS]
+    );
+  });
+}
+
+export async function getQueuedErrorLogs(limit = 50): Promise<LocalErrorLogRow[]> {
+  return enqueue(async () => {
+    const db = await getDatabase();
+
+    return db.getAllAsync<LocalErrorLogRow>(
+      `
+      SELECT id, severity, message, stack, context, created_at
+      FROM error_log_queue
+      ORDER BY id ASC
+      LIMIT ?
+      `,
+      [limit]
+    );
+  });
+}
+
+export async function deleteQueuedErrorLogs(ids: number[]) {
+  if (ids.length === 0) return;
+
+  return enqueue(async () => {
+    const db = await getDatabase();
+    const placeholders = ids.map(() => "?").join(",");
+
+    await db.runAsync(
+      `DELETE FROM error_log_queue WHERE id IN (${placeholders})`,
+      ids
+    );
   });
 }
 

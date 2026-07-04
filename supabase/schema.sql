@@ -70,3 +70,36 @@ create table if not exists feedback (
 alter table feedback enable row level security;
 -- Users can insert their own feedback; only admins read it (use service role key)
 create policy "feedback: anyone insert" on feedback for insert with check (true);
+
+-- ────────────────────────────────────────────────────────────
+-- Error logs (replaces Sentry — see src/lib/monitoring.ts)
+--
+-- The app writes here directly with the anon key (insert-only, same
+-- pattern as feedback above). To *read* them — e.g. to see critical
+-- errors — use the Supabase dashboard's Table Editor, or the SQL
+-- Editor with a query like:
+--
+--   select severity, message, context, app_version, platform, created_at
+--   from error_logs
+--   where severity = 'fatal'
+--   order by created_at desc;
+--
+-- Both of those go through your Supabase login, not the anon key, so
+-- the read-side restriction below doesn't block you from seeing them.
+-- ────────────────────────────────────────────────────────────
+create table if not exists error_logs (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users(id) on delete set null,
+  severity text not null check (severity in ('fatal', 'error', 'warning')),
+  message text not null,
+  stack text,
+  context jsonb,
+  platform text,
+  app_version text,
+  created_at timestamptz default now()
+);
+alter table error_logs enable row level security;
+create policy "error_logs: anyone insert" on error_logs for insert with check (true);
+
+create index if not exists error_logs_severity_created_idx
+  on error_logs (severity, created_at desc);

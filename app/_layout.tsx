@@ -21,7 +21,7 @@ import {
 
 import { initDb } from "@/lib/db";
 import { ensureNotificationPermission } from "@/lib/notifications";
-import { initMonitoring, Sentry, logError } from "@/lib/monitoring";
+import { initMonitoring, logError } from "@/lib/monitoring";
 import { useAuth } from "@/hooks/useAuth";
 import { ThemeProvider } from "@/theme";
 import { ToastProvider } from "@/lib/toast";
@@ -39,7 +39,6 @@ initMonitoring();
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
-    shouldShowAlert: true,
     shouldPlaySound: true,
     shouldSetBadge: false,
     shouldShowBanner: true,
@@ -231,4 +230,4 @@ function AppRoot() {
   );
 }
 
-export default Sentry.wrap(AppRoot);
+export default AppRoot;

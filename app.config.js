@@ -32,17 +32,6 @@ export default {
           sounds: [],
         },
       ],
-      // Sentry temporarily disabled — SENTRY_AUTH_TOKEN was rejected (401)
-      // during the source-map upload step, blocking builds. Re-add once
-      // the token is fixed:
-      // [
-      //   "@sentry/react-native/expo",
-      //   {
-      //     organization: "aji-technology",
-      //     project: "scripture-memory",
-      //     uploadSourceMaps: false,
-      //   },
-      // ],
     ],
 
     ios: {
@@ -60,6 +49,7 @@ export default {
         backgroundImage: "./assets/android-icon-background.png",
         monochromeImage: "./assets/android-icon-monochrome.png",
       },
+      // Critical for background notifications on Android 12+
       permissions: [
         "RECEIVE_BOOT_COMPLETED",
         "SCHEDULE_EXACT_ALARM",
@@ -68,6 +58,8 @@ export default {
         "VIBRATE",
         "WAKE_LOCK",
       ],
+      // Deep link handling: allows scripturememory://reset-password?... links
+      // from Supabase password reset emails to open the app directly.
       intentFilters: [
         {
           action: "VIEW",
@@ -93,7 +85,6 @@ export default {
       supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL,
       supabaseAnonKey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY,
       bibleApiBase: process.env.EXPO_PUBLIC_BIBLE_API_BASE,
-      sentryDsn: process.env.EXPO_PUBLIC_SENTRY_DSN,
     },
   },
 };

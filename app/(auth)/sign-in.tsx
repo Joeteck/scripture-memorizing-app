@@ -51,6 +51,25 @@ export default function SignIn() {
     return () => loop.stop();
   }, [googleState]);
 
+  // Safety net: if the OS never delivers the auth-callback redirect at all
+  // (e.g. the user backgrounds the app mid-flow and doesn't return), don't
+  // leave the screen stuck on "Completing sign-in" forever.
+  //
+  // NOTE: this must stay above the `authLoading` early return below — all
+  // hooks in a component have to run in the same order on every render,
+  // and an early return placed between two useEffect calls means the
+  // second one gets skipped on some renders and not others, which is
+  // exactly what caused the "Rendered more hooks than during the
+  // previous render" crash.
+  useEffect(() => {
+    if (googleState !== "completing") return;
+    const timeout = setTimeout(() => {
+      setGoogleState("idle");
+      setError("Sign-in didn't complete. Please try again.");
+    }, 15000);
+    return () => clearTimeout(timeout);
+  }, [googleState]);
+
   // Show loading while auth is initializing
   if (authLoading) {
     return (
@@ -89,18 +108,6 @@ export default function SignIn() {
       setLoading(false);
     }
   }
-
-  // Safety net: if the OS never delivers the auth-callback redirect at all
-  // (e.g. the user backgrounds the app mid-flow and doesn't return), don't
-  // leave the screen stuck on "Completing sign-in" forever.
-  useEffect(() => {
-    if (googleState !== "completing") return;
-    const timeout = setTimeout(() => {
-      setGoogleState("idle");
-      setError("Sign-in didn't complete. Please try again.");
-    }, 15000);
-    return () => clearTimeout(timeout);
-  }, [googleState]);
 
   async function googleLogin() {
     try {

@@ -15,7 +15,7 @@ import { useRouter, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { supabase } from "@/lib/supabase";
 import { useTheme } from "@/theme";
-import { logError } from "@/lib/monitoring";
+import { logError, logMessage } from "@/lib/monitoring";
 
 type CallbackStatus = "working" | "success" | "error";
 
@@ -39,6 +39,15 @@ export default function AuthCallbackScreen() {
       // access or the provider itself failed.
       if (params.error) {
         if (cancelled) return;
+        // Logged (not just shown) because this exact param is the
+        // fastest way to tell "redirect URL not in Supabase's allow
+        // list" apart from "user denied access" apart from a real
+        // provider outage — check the error_logs table for this.
+        logMessage("Google sign-in redirect returned an error", {
+          where: "auth-callback",
+          error: params.error,
+          error_description: params.error_description,
+        });
         setStatus("error");
         setMessage(
           params.error_description || "Google sign-in was not completed."
