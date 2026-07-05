@@ -12,9 +12,9 @@ import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme, type, spacing } from "@/theme";
 
-const CONTACT_EMAIL = ""; // e.g. "you@example.com" — keep in sync with app/privacy-policy.tsx
+const CONTACT_EMAIL = "adeyojuibukunoluwa1@gmail.com"; // e.g. "you@example.com" — keep in sync with app/privacy-policy.tsx
 const LAST_UPDATED = "July 2026";
-const GOVERNING_LAW = ""; // e.g. "the Federal Republic of Nigeria" — fill in before shipping
+const GOVERNING_LAW = "These terms are governed by the laws of the Federal Republic of Nigeria, without regard to its conflict-of-law principles.";
 
 function Section({
   title,

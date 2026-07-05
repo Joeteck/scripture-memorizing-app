@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { View, Text, StyleSheet, ScrollView, Pressable, Alert } from "react-native";
+import { View, Text, StyleSheet, ScrollView, Pressable, Platform } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -9,6 +9,9 @@ import { useTheme, useThemeMode, type, spacing } from "@/theme";
 import { useAuth } from "@/hooks/useAuth";
 import { getDefaultReminderInterval, setDefaultReminderInterval } from "@/lib/preferences";
 import { logError } from "@/lib/monitoring";
+import { requestIgnoreBatteryOptimizations } from "@/lib/notifications";
+import { useToast } from "@/lib/toast";
+import { useConfirm } from "@/lib/confirm";
 
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { CategoryPill } from "@/components/CategoryPill";
@@ -31,6 +34,8 @@ export default function ProfileScreen() {
   const router = useRouter();
   const { user, signOut, resetPassword, deleteAccount } = useAuth();
   const { mode, setMode } = useThemeMode();
+  const toast = useToast();
+  const confirm = useConfirm();
 
   const [defaultInterval, setDefaultIntervalState] = useState(60);
   const [sendingReset, setSendingReset] = useState(false);
@@ -49,84 +54,94 @@ export default function ProfileScreen() {
     await setDefaultReminderInterval(minutes);
   }
 
+  async function handleFixNotifications() {
+    const proceed = await confirm({
+      title: "Allow background reminders?",
+      message:
+        "Android may stop this app when it's minimized, which silently blocks reminders. The next screen lets you allow this app to keep running — choose \"Allow\" or \"Don't optimize\" there.",
+      confirmLabel: "Continue",
+      icon: "battery-charging-outline",
+    });
+    if (!proceed) return;
+
+    try {
+      await requestIgnoreBatteryOptimizations();
+    } catch (e: any) {
+      logError(e, { where: "profile: fix notification reliability" });
+      toast.showError("Couldn't open settings", "You can enable this manually in your phone's battery settings.");
+    }
+  }
+
   async function handleResetPassword() {
     if (!user?.email) return;
     try {
       setSendingReset(true);
       const { error } = await resetPassword(user.email);
       if (error) throw error;
-      Alert.alert("Check your email", `A password reset link was sent to ${user.email}.`);
+      toast.showSuccess("Check your email", `A password reset link was sent to ${user.email}.`);
     } catch (e: any) {
       logError(e, { where: "profile: reset password" });
-      Alert.alert("Couldn't send reset email", e.message ?? "Something went wrong.");
+      toast.showError("Couldn't send reset email", e.message ?? "Something went wrong.");
     } finally {
       setSendingReset(false);
     }
   }
 
-  function handleSignOut() {
-    Alert.alert("Sign Out", "Are you sure you want to sign out?", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Sign Out",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            setSigningOut(true);
-            await signOut();
-            // app/_layout.tsx's session listener handles the redirect to sign-in.
-          } catch (e: any) {
-            setSigningOut(false);
-            logError(e, { where: "profile: sign out" });
-            Alert.alert("Couldn't sign out", e.message ?? "Something went wrong.");
-          }
-        },
-      },
-    ]);
+  async function handleSignOut() {
+    const ok = await confirm({
+      title: "Sign Out",
+      message: "Are you sure you want to sign out?",
+      confirmLabel: "Sign Out",
+      destructive: true,
+      icon: "log-out-outline",
+    });
+    if (!ok) return;
+
+    try {
+      setSigningOut(true);
+      await signOut();
+      // app/_layout.tsx's session listener handles the redirect to sign-in.
+    } catch (e: any) {
+      setSigningOut(false);
+      logError(e, { where: "profile: sign out" });
+      toast.showError("Couldn't sign out", e.message ?? "Something went wrong.");
+    }
   }
 
-  function handleDeleteAccount() {
-    Alert.alert(
-      "Delete Account?",
-      "This permanently deletes your account, verses, and categories. This can't be undone.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Continue",
-          style: "destructive",
-          onPress: () => {
-            // Second confirmation, deliberately — this is irreversible and
-            // easy to tap by accident on the first alert.
-            Alert.alert(
-              "Are you absolutely sure?",
-              "There is no way to recover your account or data after this.",
-              [
-                { text: "Cancel", style: "cancel" },
-                {
-                  text: "Delete My Account",
-                  style: "destructive",
-                  onPress: async () => {
-                    try {
-                      setDeletingAccount(true);
-                      await deleteAccount();
-                      await signOut();
-                      // app/_layout.tsx's session listener handles the redirect to sign-in.
-                    } catch (e: any) {
-                      setDeletingAccount(false);
-                      logError(e, { where: "profile: delete account" });
-                      Alert.alert(
-                        "Couldn't delete account",
-                        e.message ?? "Something went wrong. Please try again, or contact support."
-                      );
-                    }
-                  },
-                },
-              ]
-            );
-          },
-        },
-      ]
-    );
+  async function handleDeleteAccount() {
+    const firstOk = await confirm({
+      title: "Delete Account?",
+      message: "This permanently deletes your account, verses, and categories. This can't be undone.",
+      confirmLabel: "Continue",
+      destructive: true,
+      icon: "trash-outline",
+    });
+    if (!firstOk) return;
+
+    // Second confirmation, deliberately — this is irreversible and easy
+    // to tap by accident on the first dialog.
+    const secondOk = await confirm({
+      title: "Are you absolutely sure?",
+      message: "There is no way to recover your account or data after this.",
+      confirmLabel: "Delete My Account",
+      destructive: true,
+      icon: "warning-outline",
+    });
+    if (!secondOk) return;
+
+    try {
+      setDeletingAccount(true);
+      await deleteAccount();
+      await signOut();
+      // app/_layout.tsx's session listener handles the redirect to sign-in.
+    } catch (e: any) {
+      setDeletingAccount(false);
+      logError(e, { where: "profile: delete account" });
+      toast.showError(
+        "Couldn't delete account",
+        e.message ?? "Something went wrong. Please try again, or contact support."
+      );
+    }
   }
 
   return (
@@ -197,6 +212,28 @@ export default function ProfileScreen() {
             ))}
           </View>
         </View>
+
+        {/* Notification reliability */}
+        {Platform.OS === "android" && (
+          <>
+            <Text style={[type.sectionLabel, { color: theme.textSecondary, marginTop: spacing.xl }]}>
+              NOTIFICATION RELIABILITY
+            </Text>
+            <View style={[styles.card, { backgroundColor: theme.surface }]}>
+              <Text style={[type.body, { color: theme.textSecondary, marginBottom: spacing.sm }]}>
+                Some phones aggressively stop apps running in the background, which can silently
+                block reminders. Allowing this app to run unrestricted fixes that.
+              </Text>
+              <Pressable onPress={handleFixNotifications} style={styles.actionRow}>
+                <Ionicons name="battery-charging-outline" size={20} color={theme.accent} />
+                <Text style={[type.body, { color: theme.accent, marginLeft: spacing.sm, flex: 1, fontWeight: "700" }]}>
+                  Fix Notification Reliability
+                </Text>
+                <Ionicons name="chevron-forward" size={18} color={theme.accent} />
+              </Pressable>
+            </View>
+          </>
+        )}
 
         {/* Account actions */}
         <Text style={[type.sectionLabel, { color: theme.textSecondary, marginTop: spacing.xl }]}>

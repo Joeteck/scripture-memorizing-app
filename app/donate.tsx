@@ -11,7 +11,7 @@ import { logError } from "@/lib/monitoring";
 
 const ACCOUNTS = [
   { bank: "Stanbic IBTC Bank", name: "Adeyoju Ibukunoluwa Joel", number: "0034563949", id: "1" },
-  { bank: "Opay", name: "Adeyoju Ibukunoluwa Joel", number: "8058509717", id: "2" },
+  { bank: "Nombank MFB", name: "Cowrywise Ibukunoluwa Joel Adeyoju", number: "3418754037", id: "2" },
   { bank: "Palmpay", name: "Adeyoju Ibukunoluwa Joel", number: "8058509717", id: "3" },
 ];
 

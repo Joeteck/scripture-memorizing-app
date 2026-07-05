@@ -5,7 +5,7 @@ import * as SplashScreen from "expo-splash-screen";
 import * as Notifications from "expo-notifications";
 import * as Linking from "expo-linking";
 import { useFonts } from "expo-font";
-import { Platform, View, Text, StyleSheet } from "react-native";
+import { Platform, View, Text, StyleSheet, AppState } from "react-native";
 
 import {
   Lora_400Regular,
@@ -20,11 +20,13 @@ import {
 } from "@expo-google-fonts/inter";
 
 import { initDb } from "@/lib/db";
-import { ensureNotificationPermission } from "@/lib/notifications";
+import { ensureNotificationPermission, topUpAllReminders } from "@/lib/notifications";
 import { initMonitoring, logError } from "@/lib/monitoring";
 import { useAuth } from "@/hooks/useAuth";
+import { useVerses } from "@/hooks/useVerses";
 import { ThemeProvider, useTheme } from "@/theme";
 import { ToastProvider } from "@/lib/toast";
+import { ConfirmProvider } from "@/lib/confirm";
 import { TabNavigationProvider } from "@/lib/tabNavigation";
 import {
   hasCompletedOnboarding,
@@ -76,6 +78,7 @@ function RootLayout() {
   const router = useRouter();
   const segments = useSegments();
   const { session, loading } = useAuth();
+  const { learning } = useVerses(session?.user?.id ?? null);
 
   const [appReady, setAppReady] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
@@ -158,6 +161,32 @@ function RootLayout() {
 
     initialize();
   }, []);
+
+  // Reminders are scheduled in finite batches (see topUpAllReminders in
+  // src/lib/notifications.ts) rather than one indefinite repeating alarm,
+  // since Android's repeating-alarm API is inexact and unreliable in the
+  // background. This is what keeps that batch topped up: every time the
+  // app comes to the foreground, check whether any verse is running low
+  // on scheduled occurrences and extend it. Also runs once on mount so a
+  // fresh sign-in or cold start tops up immediately rather than waiting
+  // for the next foreground transition.
+  useEffect(() => {
+    if (!appReady || !session || learning.length === 0) return;
+
+    topUpAllReminders(learning).catch((e) => {
+      logError(e, { where: "topUpAllReminders: mount" });
+    });
+
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state === "active") {
+        topUpAllReminders(learning).catch((e) => {
+          logError(e, { where: "topUpAllReminders: foreground" });
+        });
+      }
+    });
+
+    return () => sub.remove();
+  }, [appReady, session, learning]);
 
   useEffect(() => {
     if (!fontsLoaded || loading || !appReady) {
@@ -244,48 +273,50 @@ function RootLayout() {
   return (
     <ThemeProvider>
       <ToastProvider>
-        <TabNavigationProvider>
-          <Stack screenOptions={{ headerShown: false }}>
-            <Stack.Screen name="(auth)" />
-            <Stack.Screen name="(tabs)" />
-            <Stack.Screen
-              name="profile"
-              options={{ presentation: "modal" }}
-            />
-            <Stack.Screen
-              name="feedback"
-              options={{ presentation: "modal" }}
-            />
-            <Stack.Screen
-              name="donate"
-              options={{ presentation: "modal" }}
-            />
-            <Stack.Screen
-              name="about"
-              options={{ presentation: "modal" }}
-            />
-            <Stack.Screen
-              name="quiz"
-              options={{ presentation: "modal" }}
-            />
-            <Stack.Screen
-              name="reset-password"
-              options={{ presentation: "modal" }}
-            />
-            <Stack.Screen
-              name="privacy-policy"
-              options={{ presentation: "modal" }}
-            />
-            <Stack.Screen
-              name="terms"
-              options={{ presentation: "modal" }}
-            />
-            <Stack.Screen
-              name="auth-callback"
-              options={{ presentation: "modal", gestureEnabled: false }}
-            />
-          </Stack>
-        </TabNavigationProvider>
+        <ConfirmProvider>
+          <TabNavigationProvider>
+            <Stack screenOptions={{ headerShown: false }}>
+              <Stack.Screen name="(auth)" />
+              <Stack.Screen name="(tabs)" />
+              <Stack.Screen
+                name="profile"
+                options={{ presentation: "modal" }}
+              />
+              <Stack.Screen
+                name="feedback"
+                options={{ presentation: "modal" }}
+              />
+              <Stack.Screen
+                name="donate"
+                options={{ presentation: "modal" }}
+              />
+              <Stack.Screen
+                name="about"
+                options={{ presentation: "modal" }}
+              />
+              <Stack.Screen
+                name="quiz"
+                options={{ presentation: "modal" }}
+              />
+              <Stack.Screen
+                name="reset-password"
+                options={{ presentation: "modal" }}
+              />
+              <Stack.Screen
+                name="privacy-policy"
+                options={{ presentation: "modal" }}
+              />
+              <Stack.Screen
+                name="terms"
+                options={{ presentation: "modal" }}
+              />
+              <Stack.Screen
+                name="auth-callback"
+                options={{ presentation: "modal", gestureEnabled: false }}
+              />
+            </Stack>
+          </TabNavigationProvider>
+        </ConfirmProvider>
       </ToastProvider>
     </ThemeProvider>
   );

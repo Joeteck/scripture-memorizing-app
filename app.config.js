@@ -57,6 +57,15 @@ export default {
         "POST_NOTIFICATIONS",
         "VIBRATE",
         "WAKE_LOCK",
+        // Lets the app ask the user to exempt it from battery optimization,
+        // which is the #1 real-world cause of "reminders stop when the app
+        // is minimized" on Android (Doze mode + OEM background killers).
+        // Legitimate use per Play Store policy for apps whose core
+        // function is scheduled/background reminders — declare this
+        // clearly in the Play Console's permissions declaration form
+        // before submitting. See src/lib/notifications.ts and
+        // PRODUCTION_AUDIT_REPORT.md for details.
+        "REQUEST_IGNORE_BATTERY_OPTIMIZATIONS",
       ],
       // Deep link handling: allows scripturememory://reset-password?... links
       // from Supabase password reset emails to open the app directly.

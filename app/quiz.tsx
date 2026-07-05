@@ -6,7 +6,7 @@
 // Not a public route — quizzing only makes sense signed in, against your
 // own verse data, so the normal auth guard in app/_layout.tsx applies.
 import React, { useMemo, useState } from "react";
-import { View, Text, Pressable, ScrollView, StyleSheet, Alert } from "react-native";
+import { View, Text, Pressable, ScrollView, StyleSheet } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -18,6 +18,7 @@ import { generateWordBankQuiz, tokensMatch, type QuizToken, type WordBankQuiz } 
 import { recordQuizAttempt, getQuizAttemptsForVerse } from "@/lib/db";
 import { logError } from "@/lib/monitoring";
 import { useToast } from "@/lib/toast";
+import { useConfirm } from "@/lib/confirm";
 import { EmptyState } from "@/components/EmptyState";
 import { PrimaryButton } from "@/components/PrimaryButton";
 
@@ -28,6 +29,7 @@ export default function QuizScreen() {
   const theme = useTheme();
   const router = useRouter();
   const toast = useToast();
+  const confirm = useConfirm();
   const { verseId } = useLocalSearchParams<{ verseId: string }>();
   const { user } = useAuth();
   const { verses, categories, markStatus } = useVerses(user?.id ?? null);
@@ -122,21 +124,18 @@ export default function QuizScreen() {
         }
 
         if (streak >= MASTERY_STREAK_THRESHOLD && verse!.status !== "mastered") {
-          Alert.alert(
-            `${streak} perfect scores in a row!`,
-            `You've nailed ${verse!.reference} ${streak} times in a row. Mark it as mastered?`,
-            [
-              { text: "Not yet", style: "cancel" },
-              {
-                text: "Mark Mastered",
-                onPress: () => {
-                  markStatus(verse!.id, "mastered").catch((e) => {
-                    logError(e, { where: "quiz: mark mastered from streak prompt" });
-                  });
-                },
-              },
-            ]
-          );
+          const markMastered = await confirm({
+            title: `${streak} perfect scores in a row!`,
+            message: `You've nailed ${verse!.reference} ${streak} times in a row. Mark it as mastered?`,
+            confirmLabel: "Mark Mastered",
+            cancelLabel: "Not Yet",
+            icon: "trophy-outline",
+          });
+          if (markMastered) {
+            markStatus(verse!.id, "mastered").catch((e) => {
+              logError(e, { where: "quiz: mark mastered from streak prompt" });
+            });
+          }
         }
       }
     } catch (e) {

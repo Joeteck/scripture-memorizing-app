@@ -52,10 +52,21 @@ export async function initDb() {
         updated_at TEXT NOT NULL
       );
 
-      CREATE TABLE IF NOT EXISTS notification_map (
-        verse_id TEXT PRIMARY KEY,
+      -- Replaced by notification_schedule below (batch scheduling needs
+      -- many notification ids per verse, not one). This data is a pure
+      -- cache of scheduled-notification IDs — nothing a user would
+      -- notice losing — so a clean drop is simpler and safer than a
+      -- row-by-row migration.
+      DROP TABLE IF EXISTS notification_map;
+
+      CREATE TABLE IF NOT EXISTS notification_schedule (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        verse_id TEXT NOT NULL,
         notification_id TEXT NOT NULL
       );
+
+      CREATE INDEX IF NOT EXISTS notification_schedule_verse_idx
+        ON notification_schedule (verse_id);
 
       CREATE TABLE IF NOT EXISTS error_log_queue (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -243,45 +254,47 @@ export async function clearVerseCache() {
   });
 }
 
-export async function saveNotificationId(verseId: string, notificationId: string) {
+export async function saveNotificationIds(verseId: string, notificationIds: string[]) {
   return enqueue(async () => {
     const db = await getDatabase();
 
-    await db.runAsync(
-      `
-      INSERT OR REPLACE INTO notification_map
-      (verse_id,notification_id)
-      VALUES(?,?)
-      `,
-      [verseId, notificationId]
-    );
+    for (const notificationId of notificationIds) {
+      await db.runAsync(
+        `
+        INSERT INTO notification_schedule
+        (verse_id,notification_id)
+        VALUES(?,?)
+        `,
+        [verseId, notificationId]
+      );
+    }
   });
 }
 
-export async function getNotificationId(verseId: string): Promise<string | null> {
+export async function getNotificationIds(verseId: string): Promise<string[]> {
   return enqueue(async () => {
     const db = await getDatabase();
 
-    const row = await db.getFirstAsync<{ notification_id: string }>(
+    const rows = await db.getAllAsync<{ notification_id: string }>(
       `
       SELECT notification_id
-      FROM notification_map
+      FROM notification_schedule
       WHERE verse_id=?
       `,
       [verseId]
     );
 
-    return row?.notification_id ?? null;
+    return rows.map((r) => r.notification_id);
   });
 }
 
-export async function clearNotificationId(verseId: string) {
+export async function clearNotificationIds(verseId: string) {
   return enqueue(async () => {
     const db = await getDatabase();
 
     await db.runAsync(
       `
-      DELETE FROM notification_map
+      DELETE FROM notification_schedule
       WHERE verse_id=?
       `,
       [verseId]
@@ -295,7 +308,7 @@ export async function clearNotificationCache() {
 
     await db.runAsync(
       `
-      DELETE FROM notification_map
+      DELETE FROM notification_schedule
       `
     );
   });
@@ -307,7 +320,7 @@ export async function resetLocalDatabase() {
 
     await db.execAsync(`
       DELETE FROM verses_cache;
-      DELETE FROM notification_map;
+      DELETE FROM notification_schedule;
       DELETE FROM quiz_attempts;
     `);
   });
