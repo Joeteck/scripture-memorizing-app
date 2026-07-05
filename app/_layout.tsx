@@ -160,11 +160,21 @@ function RootLayout() {
   }, []);
 
   useEffect(() => {
-    if (!fontsLoaded || loading || !appReady || showOnboarding) {
+    if (!fontsLoaded || loading || !appReady) {
       return;
     }
 
+    // Hide the splash the moment the app is actually ready to show
+    // something — whether that's onboarding, sign-in, or the main tabs.
+    // This used to also wait on `!showOnboarding`, which meant the splash
+    // never hid on a fresh install (onboarding not yet completed) even
+    // though the onboarding screen was already rendering underneath it.
     SplashScreen.hideAsync().catch(() => {});
+
+    if (showOnboarding) {
+      // Auth-routing below doesn't apply yet — let onboarding finish first.
+      return;
+    }
 
     const inAuth = segments[0] === "(auth)";
     // reset-password and auth-callback are reached via a deep link before
@@ -252,6 +262,10 @@ function RootLayout() {
             />
             <Stack.Screen
               name="about"
+              options={{ presentation: "modal" }}
+            />
+            <Stack.Screen
+              name="quiz"
               options={{ presentation: "modal" }}
             />
             <Stack.Screen

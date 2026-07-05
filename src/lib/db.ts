@@ -65,6 +65,16 @@ export async function initDb() {
         context TEXT,
         created_at TEXT NOT NULL
       );
+
+      CREATE TABLE IF NOT EXISTS quiz_attempts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        verse_id TEXT NOT NULL,
+        correct_count INTEGER NOT NULL,
+        total_blanks INTEGER NOT NULL,
+        created_at TEXT NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS quiz_attempts_verse_idx ON quiz_attempts (verse_id, id DESC);
     `);
   });
 }
@@ -298,6 +308,59 @@ export async function resetLocalDatabase() {
     await db.execAsync(`
       DELETE FROM verses_cache;
       DELETE FROM notification_map;
+      DELETE FROM quiz_attempts;
     `);
+  });
+}
+
+/**
+ * "Test Yourself" quiz history — device-local only (not synced to
+ * Supabase). Good enough for v1: streaks and best-score are just used to
+ * nudge the user toward marking a verse mastered, not as a source of
+ * truth that needs to survive a reinstall or follow them across devices.
+ */
+export interface QuizAttemptRow {
+  id: number;
+  verse_id: string;
+  correct_count: number;
+  total_blanks: number;
+  created_at: string;
+}
+
+export async function recordQuizAttempt(
+  verseId: string,
+  correctCount: number,
+  totalBlanks: number
+) {
+  return enqueue(async () => {
+    const db = await getDatabase();
+
+    await db.runAsync(
+      `
+      INSERT INTO quiz_attempts (verse_id, correct_count, total_blanks, created_at)
+      VALUES (?,?,?,?)
+      `,
+      [verseId, correctCount, totalBlanks, new Date().toISOString()]
+    );
+  });
+}
+
+export async function getQuizAttemptsForVerse(
+  verseId: string,
+  limit = 20
+): Promise<QuizAttemptRow[]> {
+  return enqueue(async () => {
+    const db = await getDatabase();
+
+    return db.getAllAsync<QuizAttemptRow>(
+      `
+      SELECT id, verse_id, correct_count, total_blanks, created_at
+      FROM quiz_attempts
+      WHERE verse_id = ?
+      ORDER BY id DESC
+      LIMIT ?
+      `,
+      [verseId, limit]
+    );
   });
 }

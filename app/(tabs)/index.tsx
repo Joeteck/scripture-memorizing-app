@@ -1,8 +1,8 @@
 // app/(tabs)/index.tsx — Today screen, fixed swipe-after-master bug
 import React, { useMemo } from "react";
-import { View, ScrollView, RefreshControl, StyleSheet, Text } from "react-native";
+import { View, ScrollView, RefreshControl, StyleSheet, Text, Pressable } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useFocusEffect } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 
 import { useTheme, type } from "@/theme";
@@ -14,6 +14,7 @@ import { EmptyState } from "@/components/EmptyState";
 
 export default function Today() {
   const theme = useTheme();
+  const router = useRouter();
   const { user } = useAuth();
 
   const { learning, mastered, categories, loading, refresh, markStatus } = useVerses(user?.id ?? null);
@@ -83,6 +84,37 @@ export default function Today() {
             />
           )}
         </View>
+
+        {/* Test Yourself — picks a random verse from today's learning list
+            each time it's tapped, so repeat testing cycles through
+            everything rather than always quizzing the same one. */}
+        {learning.length > 0 && (
+          <Pressable
+            onPress={() => {
+              const target = learning[Math.floor(Math.random() * learning.length)];
+              router.push({ pathname: "/quiz", params: { verseId: target.id } });
+            }}
+            style={({ pressed }) => [
+              styles.testCard,
+              {
+                backgroundColor: theme.accentSoft,
+                borderColor: theme.accent,
+                opacity: pressed ? 0.85 : 1,
+              },
+            ]}
+          >
+            <View style={[styles.testIcon, { backgroundColor: theme.accent }]}>
+              <Ionicons name="flash" size={22} color="#FFFFFF" />
+            </View>
+            <View style={{ flex: 1, marginLeft: 14 }}>
+              <Text style={[type.bodyBold, { color: theme.text }]}>Test Yourself</Text>
+              <Text style={[type.caption, { color: theme.textSecondary, marginTop: 2 }]}>
+                Fill in the missing words from memory
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color={theme.accent} />
+          </Pressable>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -100,4 +132,19 @@ const styles = StyleSheet.create({
   divider: { width: 1, height: 45, backgroundColor: "#D6D6D6" },
   number: { fontSize: 28, fontWeight: "700" },
   label: { marginTop: 5, fontSize: 13, fontWeight: "600" },
+  testCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 20,
+    padding: 16,
+    borderRadius: 18,
+    borderWidth: 1,
+  },
+  testIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
 });
