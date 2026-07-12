@@ -1,31 +1,47 @@
 // hooks/useVerses.ts
 //
+// Local-first data store for verses and categories.
+//
 // IMPORTANT: This is a shared singleton store, not a per-component hook
 // with isolated state. The (tabs)/_layout.tsx pager keeps all 5 tab
 // screens mounted at once (Today, Dashboard, Add, Categories, History),
 // and each one calls useVerses(userId). If each call created its own
 // independent useState, creating a category on the Categories tab would
-// never be visible on the Add tab until that tab unmounted and remounted
-// (or the user manually pulled-to-refresh) — exactly the stale-category
-// bug we're fixing. Instead, all verses/categories state lives in one
-// module-level store, and every component calling useVerses subscribes
-// to it. Any mutation (addVerse, addCategory, markStatus, deleteVerse)
-// updates the shared store once, and every mounted tab re-renders
-// immediately with the new data — no manual refresh, no remount needed.
-import { useCallback, useEffect, useRef, useState } from "react";
-import { logMessage } from "@/lib/monitoring";
-import { supabase } from "@/lib/supabase";
+// never be visible on the Add tab until that tab unmounted and remounted.
+// Instead, all verses/categories state lives in one module-level store,
+// and every component calling useVerses subscribes to it. Any mutation
+// (addVerse, addCategory, markStatus, deleteVerse) updates the shared
+// store once, and every mounted tab re-renders immediately.
+//
+// LOCAL-FIRST: every mutation below writes to the on-device SQLite
+// database (src/lib/db.ts) and nothing else. There is no Supabase insert
+// on the add/edit/delete path, so all of it — including creating a new
+// verse — works with no network connection. The only thing that still
+// needs the network is fetching the scripture text itself for a *new*
+// reference (src/lib/bibleApi.ts hits a public Bible API), because the
+// app doesn't bundle the text of the whole Bible; once a verse has been
+// fetched once, it's saved locally and never needs the network again.
+//
+// The cloud is no longer this store's data source. It's an optional,
+// user-initiated backup target — see src/lib/backup.ts and app/backup.tsx.
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { logError } from "@/lib/monitoring";
 import {
-  cacheVerses,
-  cacheVerse,
-  getCachedVerses,
-  removeCachedVerse,
+  getAllLocalVerses,
+  getAllLocalCategories,
+  insertLocalVerse,
+  updateLocalVerse,
+  deleteLocalVerse,
+  insertLocalCategory,
+  deleteLocalCategory,
+  migrateLegacyCacheIfNeeded,
 } from "@/lib/db";
 import {
   scheduleVerseReminder,
   cancelVerseReminder,
 } from "@/lib/notifications";
 import { fetchVerse } from "@/lib/bibleApi";
+import { generateId } from "@/lib/id";
 import { Category, Verse, VerseStatus } from "@/types";
 
 interface StoreState {
@@ -63,38 +79,17 @@ async function refreshStore(userId: string | null) {
   setStore({ userId, loading: true });
 
   try {
-    const [
-      { data: verseRows, error: verseError },
-      { data: categoryRows, error: categoryError },
-    ] = await Promise.all([
-      supabase
-        .from("verses")
-        .select("*")
-        .eq("user_id", userId)
-        .order("created_at", { ascending: false }),
+    await migrateLegacyCacheIfNeeded(userId);
 
-      supabase
-        .from("categories")
-        .select("*")
-        .eq("user_id", userId)
-        .order("name"),
+    const [verses, categories] = await Promise.all([
+      getAllLocalVerses(userId),
+      getAllLocalCategories(userId),
     ]);
 
-    if (verseError) throw verseError;
-    if (categoryError) throw categoryError;
-
-    const freshVerses = (verseRows as Verse[]) ?? [];
-    const freshCategories = (categoryRows as Category[]) ?? [];
-
-    setStore({ verses: freshVerses, categories: freshCategories, loading: false });
-
-    await cacheVerses(freshVerses);
+    setStore({ verses, categories, loading: false });
   } catch (error) {
-    logMessage("Falling back to cached verses (offline or fetch failed)", {
-      error: error instanceof Error ? error.message : String(error),
-    });
-    const cached = await getCachedVerses();
-    setStore({ verses: cached, loading: false });
+    logError(error, { where: "refreshStore (local-first read)" });
+    setStore({ loading: false });
   }
 }
 
@@ -126,32 +121,31 @@ export function useVerses(userId: string | null) {
       categoryId: string | null;
       reminderIntervalMinutes: number;
       translation?: string;
+      /** Pass an already-fetched preview (see Add Verse's search-then-preview
+       * flow) to avoid a duplicate network call for text that's already on
+       * screen. */
+      fetched?: { reference: string; text: string; translation: string };
     }) => {
       if (!userId) throw new Error("Not signed in.");
 
-      const fetched = await fetchVerse(params.reference, params.translation);
+      const fetched = params.fetched ?? (await fetchVerse(params.reference, params.translation));
 
-      const { data, error } = await supabase
-        .from("verses")
-        .insert({
-          user_id: userId,
-          reference: fetched.reference,
-          content: fetched.text,
-          translation: fetched.translation,
-          category_id: params.categoryId,
-          status: "learning",
-          date_started: new Date().toISOString().slice(0, 10),
-          reminder_interval_minutes: params.reminderIntervalMinutes,
-        })
-        .select()
-        .single();
+      const verse: Verse = {
+        id: generateId(),
+        user_id: userId,
+        reference: fetched.reference,
+        content: fetched.text,
+        translation: fetched.translation,
+        category_id: params.categoryId,
+        status: "learning",
+        date_started: new Date().toISOString().slice(0, 10),
+        date_mastered: null,
+        reminder_interval_minutes: params.reminderIntervalMinutes,
+        created_at: new Date().toISOString(),
+      };
 
-      if (error) throw error;
-
-      const verse = data as Verse;
-
+      await insertLocalVerse(verse);
       setStore({ verses: [verse, ...store.verses] });
-      await cacheVerse(verse);
       await scheduleVerseReminder(verse);
 
       return verse;
@@ -160,24 +154,17 @@ export function useVerses(userId: string | null) {
   );
 
   const markStatus = useCallback(async (verseId: string, status: VerseStatus) => {
-    const update =
-      status === "mastered"
-        ? { status, date_mastered: new Date().toISOString().slice(0, 10) }
-        : { status, date_mastered: null };
+    const existing = store.verses.find((v) => v.id === verseId);
+    if (!existing) throw new Error("Verse not found.");
 
-    const { data, error } = await supabase
-      .from("verses")
-      .update(update)
-      .eq("id", verseId)
-      .select()
-      .single();
+    const updated: Verse = {
+      ...existing,
+      status,
+      date_mastered: status === "mastered" ? new Date().toISOString().slice(0, 10) : null,
+    };
 
-    if (error) throw error;
-
-    const updated = data as Verse;
-
+    await updateLocalVerse(updated);
     setStore({ verses: store.verses.map((v) => (v.id === verseId ? updated : v)) });
-    await cacheVerse(updated);
 
     if (status === "mastered") {
       await cancelVerseReminder(verseId);
@@ -188,39 +175,55 @@ export function useVerses(userId: string | null) {
 
   const deleteVerse = useCallback(async (verseId: string) => {
     await cancelVerseReminder(verseId);
-
-    const { error } = await supabase.from("verses").delete().eq("id", verseId);
-    if (error) throw error;
-
+    await deleteLocalVerse(verseId);
     setStore({ verses: store.verses.filter((v) => v.id !== verseId) });
-    await removeCachedVerse(verseId);
   }, []);
 
   const addCategory = useCallback(
     async (name: string, color: string) => {
       if (!userId) throw new Error("Not signed in.");
 
-      const { data, error } = await supabase
-        .from("categories")
-        .insert({ user_id: userId, name, color })
-        .select()
-        .single();
+      const category: Category = {
+        id: generateId(),
+        user_id: userId,
+        name,
+        color,
+        created_at: new Date().toISOString(),
+      };
 
-      if (error) throw error;
-
-      const category = data as Category;
+      await insertLocalCategory(category);
 
       // Update the shared store immediately — every mounted tab
       // (Add Verse included) re-renders with the new category right away.
-      setStore({ categories: [...store.categories, category].sort((a, b) => a.name.localeCompare(b.name)) });
+      setStore({
+        categories: [...store.categories, category].sort((a, b) => a.name.localeCompare(b.name)),
+      });
 
       return category;
     },
     [userId]
   );
 
-  const learning = store.verses.filter((v) => v.status === "learning");
-  const mastered = store.verses.filter((v) => v.status === "mastered");
+  const removeCategory = useCallback(async (categoryId: string) => {
+    await deleteLocalCategory(categoryId);
+    setStore({
+      categories: store.categories.filter((c) => c.id !== categoryId),
+      verses: store.verses.map((v) =>
+        v.category_id === categoryId ? { ...v, category_id: null } : v
+      ),
+    });
+  }, []);
+
+  // Memoized on store.verses so these keep a stable reference across
+  // re-renders that don't actually change the verse list.
+  const learning = useMemo(
+    () => store.verses.filter((v) => v.status === "learning"),
+    [store.verses]
+  );
+  const mastered = useMemo(
+    () => store.verses.filter((v) => v.status === "mastered"),
+    [store.verses]
+  );
 
   return {
     verses: store.verses,
@@ -233,5 +236,6 @@ export function useVerses(userId: string | null) {
     markStatus,
     deleteVerse,
     addCategory,
+    removeCategory,
   };
 }

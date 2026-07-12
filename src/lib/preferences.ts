@@ -49,3 +49,57 @@ export async function setDefaultReminderInterval(minutes: number): Promise<void>
     console.warn("Failed to save default reminder interval", e);
   }
 }
+
+// ---------------------------------------------------------------------
+// Backup & Restore preferences (see src/lib/backup.ts, app/backup.tsx)
+// ---------------------------------------------------------------------
+export type BackupFrequency = "daily" | "weekly" | "monthly";
+
+const BACKUP_ENABLED_KEY = "pref:backupEnabled";
+const BACKUP_FREQUENCY_KEY = "pref:backupFrequency";
+const BACKUP_LAST_AT_KEY = "pref:backupLastAt";
+
+const DEFAULT_BACKUP_FREQUENCY: BackupFrequency = "weekly";
+
+export interface BackupSettings {
+  enabled: boolean;
+  frequency: BackupFrequency;
+  /** ISO timestamp of the last successful backup, or null if never backed up. */
+  lastBackupAt: string | null;
+}
+
+export async function getBackupSettings(): Promise<BackupSettings> {
+  try {
+    const [enabledRaw, frequencyRaw, lastAt] = await Promise.all([
+      AsyncStorage.getItem(BACKUP_ENABLED_KEY),
+      AsyncStorage.getItem(BACKUP_FREQUENCY_KEY),
+      AsyncStorage.getItem(BACKUP_LAST_AT_KEY),
+    ]);
+
+    const frequency: BackupFrequency =
+      frequencyRaw === "daily" || frequencyRaw === "weekly" || frequencyRaw === "monthly"
+        ? frequencyRaw
+        : DEFAULT_BACKUP_FREQUENCY;
+
+    return {
+      enabled: enabledRaw === "true",
+      frequency,
+      lastBackupAt: lastAt,
+    };
+  } catch (e) {
+    console.warn("Failed to read backup settings", e);
+    return { enabled: false, frequency: DEFAULT_BACKUP_FREQUENCY, lastBackupAt: null };
+  }
+}
+
+export async function setBackupEnabled(enabled: boolean): Promise<void> {
+  await AsyncStorage.setItem(BACKUP_ENABLED_KEY, enabled ? "true" : "false");
+}
+
+export async function setBackupFrequency(frequency: BackupFrequency): Promise<void> {
+  await AsyncStorage.setItem(BACKUP_FREQUENCY_KEY, frequency);
+}
+
+export async function setLastBackupAt(iso: string): Promise<void> {
+  await AsyncStorage.setItem(BACKUP_LAST_AT_KEY, iso);
+}

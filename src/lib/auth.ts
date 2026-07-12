@@ -114,5 +114,14 @@ export async function getUser() {
 export async function deleteAccount() {
   const { data, error } = await supabase.functions.invoke("delete-account");
   if (error) throw error;
+
+  // Deleting the auth user cascades the user's cloud-side rows (backup
+  // snapshots, metadata, device registrations, sync history). It has no
+  // way to reach this device's local SQLite database though — that's the
+  // whole point of local-first — so clear it here too, otherwise a
+  // "deleted" account would still show all its verses locally.
+  const { resetLocalDatabase } = await import("@/lib/db");
+  await resetLocalDatabase();
+
   return data;
 }

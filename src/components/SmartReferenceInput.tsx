@@ -30,9 +30,11 @@ interface Props {
   value: string;
   onChange: (ref: string) => void;
   onModeChange?: (mode: InputMode) => void;
+  /** Fired when the user presses the keyboard's search/return key. */
+  onSubmit?: (ref: string) => void;
 }
 
-export function SmartReferenceInput({ value, onChange, onModeChange }: Props) {
+export function SmartReferenceInput({ value, onChange, onModeChange, onSubmit }: Props) {
   const theme = useTheme();
   const inputRef = useRef<TextInput>(null);
   const [raw, setRaw] = useState("");
@@ -229,7 +231,8 @@ export function SmartReferenceInput({ value, onChange, onModeChange }: Props) {
           style={[styles.input, { color: theme.text }]}
           autoCorrect={false}
           autoCapitalize="words"
-          returnKeyType="done"
+          returnKeyType="search"
+          onSubmitEditing={() => onSubmit?.(raw)}
         />
         {raw.length > 0 && (
           <Pressable hitSlop={8} onPress={() => { 

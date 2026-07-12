@@ -2,10 +2,9 @@ import "react-native-gesture-handler";
 import React, { useEffect, useState } from "react";
 import { Stack, useRouter, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
-import * as Notifications from "expo-notifications";
 import * as Linking from "expo-linking";
 import { useFonts } from "expo-font";
-import { Platform, View, Text, StyleSheet, AppState } from "react-native";
+import { View, Text, StyleSheet, AppState } from "react-native";
 
 import {
   Lora_400Regular,
@@ -28,26 +27,51 @@ import { ThemeProvider, useTheme } from "@/theme";
 import { ToastProvider } from "@/lib/toast";
 import { ConfirmProvider } from "@/lib/confirm";
 import { TabNavigationProvider } from "@/lib/tabNavigation";
+import { DrawerNavigationProvider, useDrawer } from "@/lib/drawer";
+import { maybeAutoBackup } from "@/lib/backup";
 import {
   hasCompletedOnboarding,
   markOnboardingComplete,
 } from "@/lib/onboarding";
 import { OnboardingScreen } from "@/components/OnboardingScreen";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { DrawerMenu } from "@/components/DrawerMenu";
 import { SUPABASE_CONFIGURED } from "@/lib/supabase";
 import AppSplashScreen from "./splash";
+
+/**
+ * The one DrawerMenu instance for the whole app. Every screen opens it via
+ * useDrawer().open() (see src/components/AppHeader.tsx) instead of each
+ * screen managing its own drawer state and rendering its own copy — that
+ * was the source of the "menu only works from Dashboard" gap.
+ */
+function GlobalDrawer() {
+  const { isOpen, close } = useDrawer();
+  const { session, signOut } = useAuth();
+
+  const userName = session?.user?.email ? session.user.email.split("@")[0] : undefined;
+
+  return (
+    <DrawerMenu
+      visible={isOpen}
+      onClose={close}
+      userName={userName}
+      userEmail={session?.user?.email}
+      onSignOut={signOut}
+    />
+  );
+}
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 initMonitoring();
 
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-});
+// Notification handler + Android channel are registered once, in
+// src/lib/notifications.ts, at module load. Previously this file also
+// registered its own setNotificationHandler + channel config here, with
+// slightly different settings (shouldPlaySound, missing sound/bypassDnd
+// overrides) — whichever import ran last silently won, which is exactly
+// the kind of "duplicate registration" that causes inconsistent
+// notification behavior. Single source of truth now.
 
 /**
  * Shown instead of the normal app when EXPO_PUBLIC_SUPABASE_URL /
@@ -127,25 +151,11 @@ function RootLayout() {
     async function initialize() {
       try {
         await initDb();
+        // Requests permission and creates the "verse-reminders" Android
+        // channel (see ensureNotificationChannel in src/lib/notifications.ts).
+        // This used to be duplicated here with a second, slightly different
+        // channel config — removed in favor of the one implementation.
         await ensureNotificationPermission();
-
-        if (Platform.OS === "android") {
-          const Notif = await import("expo-notifications");
-
-          await Notif.setNotificationChannelAsync(
-            "verse-reminders",
-            {
-              name: "Verse Reminders",
-              importance: Notif.AndroidImportance.MAX,
-              vibrationPattern: [0, 250, 250, 250],
-              enableLights: true,
-              enableVibrate: true,
-              lockscreenVisibility:
-                Notif.AndroidNotificationVisibility.PUBLIC,
-              showBadge: true,
-            }
-          );
-        }
 
         const done = await hasCompletedOnboarding();
 
@@ -187,6 +197,30 @@ function RootLayout() {
 
     return () => sub.remove();
   }, [appReady, session, learning]);
+
+  // Cloud backup is opt-in and schedule-driven (see src/lib/backup.ts):
+  // it never runs on its own unless the user turned on Backup & Restore
+  // and picked a frequency. This just checks, on launch and on every
+  // foreground transition, whether enough time has passed since the last
+  // backup to run the next scheduled one — the same trigger points used
+  // for topUpAllReminders above.
+  useEffect(() => {
+    if (!appReady || !session) return;
+
+    maybeAutoBackup(session.user.id).catch((e) => {
+      logError(e, { where: "maybeAutoBackup: mount" });
+    });
+
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state === "active") {
+        maybeAutoBackup(session.user.id).catch((e) => {
+          logError(e, { where: "maybeAutoBackup: foreground" });
+        });
+      }
+    });
+
+    return () => sub.remove();
+  }, [appReady, session]);
 
   useEffect(() => {
     if (!fontsLoaded || loading || !appReady) {
@@ -275,46 +309,53 @@ function RootLayout() {
       <ToastProvider>
         <ConfirmProvider>
           <TabNavigationProvider>
-            <Stack screenOptions={{ headerShown: false }}>
-              <Stack.Screen name="(auth)" />
-              <Stack.Screen name="(tabs)" />
-              <Stack.Screen
-                name="profile"
-                options={{ presentation: "modal" }}
-              />
-              <Stack.Screen
-                name="feedback"
-                options={{ presentation: "modal" }}
-              />
-              <Stack.Screen
-                name="donate"
-                options={{ presentation: "modal" }}
-              />
-              <Stack.Screen
-                name="about"
-                options={{ presentation: "modal" }}
-              />
-              <Stack.Screen
-                name="quiz"
-                options={{ presentation: "modal" }}
-              />
-              <Stack.Screen
-                name="reset-password"
-                options={{ presentation: "modal" }}
-              />
-              <Stack.Screen
-                name="privacy-policy"
-                options={{ presentation: "modal" }}
-              />
-              <Stack.Screen
-                name="terms"
-                options={{ presentation: "modal" }}
-              />
-              <Stack.Screen
-                name="auth-callback"
-                options={{ presentation: "modal", gestureEnabled: false }}
-              />
-            </Stack>
+            <DrawerNavigationProvider>
+              <Stack screenOptions={{ headerShown: false }}>
+                <Stack.Screen name="(auth)" />
+                <Stack.Screen name="(tabs)" />
+                <Stack.Screen
+                  name="profile"
+                  options={{ presentation: "modal" }}
+                />
+                <Stack.Screen
+                  name="backup"
+                  options={{ presentation: "modal" }}
+                />
+                <Stack.Screen
+                  name="feedback"
+                  options={{ presentation: "modal" }}
+                />
+                <Stack.Screen
+                  name="donate"
+                  options={{ presentation: "modal" }}
+                />
+                <Stack.Screen
+                  name="about"
+                  options={{ presentation: "modal" }}
+                />
+                <Stack.Screen
+                  name="quiz"
+                  options={{ presentation: "modal" }}
+                />
+                <Stack.Screen
+                  name="reset-password"
+                  options={{ presentation: "modal" }}
+                />
+                <Stack.Screen
+                  name="privacy-policy"
+                  options={{ presentation: "modal" }}
+                />
+                <Stack.Screen
+                  name="terms"
+                  options={{ presentation: "modal" }}
+                />
+                <Stack.Screen
+                  name="auth-callback"
+                  options={{ presentation: "modal", gestureEnabled: false }}
+                />
+              </Stack>
+              <GlobalDrawer />
+            </DrawerNavigationProvider>
           </TabNavigationProvider>
         </ConfirmProvider>
       </ToastProvider>

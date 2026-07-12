@@ -235,6 +235,24 @@ export default function ProfileScreen() {
           </>
         )}
 
+        {/* Data & Backup */}
+        <Text style={[type.sectionLabel, { color: theme.textSecondary, marginTop: spacing.xl }]}>
+          DATA & BACKUP
+        </Text>
+        <View style={[styles.card, { backgroundColor: theme.surface }]}>
+          <Text style={[type.body, { color: theme.textSecondary, marginBottom: spacing.sm }]}>
+            Your verses and progress are always stored on this device and work fully offline.
+            Cloud backup is optional — turn it on here for disaster recovery.
+          </Text>
+          <Pressable onPress={() => router.push("/backup")} style={styles.actionRow}>
+            <Ionicons name="cloud-upload-outline" size={20} color={theme.accent} />
+            <Text style={[type.body, { color: theme.accent, marginLeft: spacing.sm, flex: 1, fontWeight: "700" }]}>
+              Backup & Restore
+            </Text>
+            <Ionicons name="chevron-forward" size={18} color={theme.accent} />
+          </Pressable>
+        </View>
+
         {/* Account actions */}
         <Text style={[type.sectionLabel, { color: theme.textSecondary, marginTop: spacing.xl }]}>
           ACCOUNT

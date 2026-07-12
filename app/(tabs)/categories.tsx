@@ -21,6 +21,7 @@ import { useToast } from "@/lib/toast";
 import { logError } from "@/lib/monitoring";
 
 import { EmptyState } from "@/components/EmptyState";
+import { AppHeader } from "@/components/AppHeader";
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { CategoryPill } from "@/components/CategoryPill";
 import { Category, Verse } from "@/types";
@@ -153,8 +154,7 @@ export default function CategoriesScreen() {
   return (
     <SafeAreaView edges={["top"]} style={[styles.container, { backgroundColor: theme.background }]}>
       <View style={styles.content}>
-        <Text style={[type.sectionLabel, { color: theme.textSecondary }]}>ORGANIZE</Text>
-        <Text style={[type.screenTitle, { color: theme.text, marginBottom: 28 }]}>Categories</Text>
+        <AppHeader subtitle="ORGANIZE" title="Categories" />
 
         {/* Create form */}
         <View style={[styles.card, { backgroundColor: theme.surface }]}>

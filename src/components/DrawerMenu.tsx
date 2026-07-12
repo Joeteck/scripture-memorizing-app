@@ -64,12 +64,20 @@ export function DrawerMenu({ visible, onClose, userName, userEmail, avatarIndex 
   const avatarBg = AVATAR_COLORS[avatarIndex % AVATAR_COLORS.length];
   const initials = (displayName.slice(0, 2) || "SC").toUpperCase();
 
+  // One consistent set of destinations reachable from every screen in the
+  // app — this is the "global menu" the whole navigation redesign is
+  // built around. Order follows how often each is used: Home first,
+  // account/config screens next, then the informational/legal group.
   const items: DrawerMenuItem[] = [
+    { icon: "home-outline", label: "Home", onPress: () => { onClose(); router.push("/(tabs)"); } },
     { icon: "person-outline", label: "Profile", onPress: () => { onClose(); router.push("/profile"); } },
     { icon: "settings-outline", label: "Settings", onPress: () => { onClose(); router.push("/profile"); } },
+    { icon: "cloud-upload-outline", label: "Backup & Restore", onPress: () => { onClose(); router.push("/backup"); } },
     { icon: "chatbubble-ellipses-outline", label: "Send Feedback", onPress: () => { onClose(); router.push("/feedback"); } },
     { icon: "heart-outline", label: "Donate", onPress: () => { onClose(); router.push("/donate"); } },
     { icon: "information-circle-outline", label: "About", onPress: () => { onClose(); router.push("/about"); } },
+    { icon: "shield-checkmark-outline", label: "Privacy Policy", onPress: () => { onClose(); router.push("/privacy-policy"); } },
+    { icon: "document-text-outline", label: "Terms of Service", onPress: () => { onClose(); router.push("/terms"); } },
   ];
 
   if (!visible) return null;

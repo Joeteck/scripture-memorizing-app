@@ -1,5 +1,5 @@
 import * as SQLite from "expo-sqlite";
-import { Verse } from "@/types";
+import { Verse, Category } from "@/types";
 
 let database: Promise<SQLite.SQLiteDatabase> | null = null;
 
@@ -46,6 +46,43 @@ export async function initDb() {
     await db.execAsync(`
       PRAGMA journal_mode = WAL;
 
+      -- Local-first storage: this device's on-disk copy IS the app's data,
+      -- not a cache of something else. Every verse, category, memorization
+      -- status, and streak-relevant field lives here first and is written
+      -- here synchronously on every add/edit/delete — the app works fully
+      -- offline because there is no round trip to the cloud in that path.
+      -- The cloud (see src/lib/backup.ts) only ever sees an encrypted
+      -- snapshot of these two tables, made when the user backs up.
+      CREATE TABLE IF NOT EXISTS local_verses (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        reference TEXT NOT NULL,
+        content TEXT NOT NULL,
+        translation TEXT NOT NULL,
+        category_id TEXT,
+        status TEXT NOT NULL,
+        date_started TEXT NOT NULL,
+        date_mastered TEXT,
+        reminder_interval_minutes INTEGER NOT NULL,
+        created_at TEXT NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS local_verses_user_idx ON local_verses (user_id, created_at DESC);
+
+      CREATE TABLE IF NOT EXISTS local_categories (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        color TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+
+      CREATE INDEX IF NOT EXISTS local_categories_user_idx ON local_categories (user_id, name);
+
+      -- Legacy read-through cache from when Supabase was the primary
+      -- store. Kept only so upgrading users don't lose data before their
+      -- first local-first launch migrates it (see migrateLegacyCache
+      -- below); no longer written to going forward.
       CREATE TABLE IF NOT EXISTS verses_cache (
         id TEXT PRIMARY KEY,
         data TEXT NOT NULL,
@@ -175,82 +212,208 @@ export async function deleteQueuedErrorLogs(ids: number[]) {
   });
 }
 
-export async function cacheVerses(verses: Verse[]) {
+/**
+ * Local-first verse & category storage.
+ *
+ * These functions are the app's real database access layer now —
+ * useVerses() reads and writes through these, not through Supabase. Every
+ * function here resolves in a few milliseconds because it never touches
+ * the network; that's what makes Add/Edit/Delete/Mark-as-mastered work
+ * identically with wifi on, wifi off, or airplane mode.
+ */
+export async function getAllLocalVerses(userId: string): Promise<Verse[]> {
   return enqueue(async () => {
     const db = await getDatabase();
-    const now = new Date().toISOString();
+    return db.getAllAsync<Verse>(
+      `SELECT * FROM local_verses WHERE user_id = ? ORDER BY created_at DESC`,
+      [userId]
+    );
+  });
+}
 
+export async function getAllLocalCategories(userId: string): Promise<Category[]> {
+  return enqueue(async () => {
+    const db = await getDatabase();
+    return db.getAllAsync<Category>(
+      `SELECT * FROM local_categories WHERE user_id = ? ORDER BY name`,
+      [userId]
+    );
+  });
+}
+
+export async function insertLocalVerse(verse: Verse) {
+  return enqueue(async () => {
+    const db = await getDatabase();
+    await db.runAsync(
+      `INSERT INTO local_verses
+       (id,user_id,reference,content,translation,category_id,status,date_started,date_mastered,reminder_interval_minutes,created_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+      [
+        verse.id,
+        verse.user_id,
+        verse.reference,
+        verse.content,
+        verse.translation,
+        verse.category_id,
+        verse.status,
+        verse.date_started,
+        verse.date_mastered,
+        verse.reminder_interval_minutes,
+        verse.created_at,
+      ]
+    );
+  });
+}
+
+export async function updateLocalVerse(verse: Verse) {
+  return enqueue(async () => {
+    const db = await getDatabase();
+    await db.runAsync(
+      `UPDATE local_verses SET
+        reference = ?, content = ?, translation = ?, category_id = ?,
+        status = ?, date_started = ?, date_mastered = ?, reminder_interval_minutes = ?
+       WHERE id = ?`,
+      [
+        verse.reference,
+        verse.content,
+        verse.translation,
+        verse.category_id,
+        verse.status,
+        verse.date_started,
+        verse.date_mastered,
+        verse.reminder_interval_minutes,
+        verse.id,
+      ]
+    );
+  });
+}
+
+export async function deleteLocalVerse(verseId: string) {
+  return enqueue(async () => {
+    const db = await getDatabase();
+    await db.runAsync(`DELETE FROM local_verses WHERE id = ?`, [verseId]);
+  });
+}
+
+export async function insertLocalCategory(category: Category) {
+  return enqueue(async () => {
+    const db = await getDatabase();
+    await db.runAsync(
+      `INSERT INTO local_categories (id,user_id,name,color,created_at) VALUES (?,?,?,?,?)`,
+      [category.id, category.user_id, category.name, category.color, category.created_at]
+    );
+  });
+}
+
+export async function deleteLocalCategory(categoryId: string) {
+  return enqueue(async () => {
+    const db = await getDatabase();
+    await db.runAsync(`DELETE FROM local_categories WHERE id = ?`, [categoryId]);
+    // Verses in a deleted category fall back to "uncategorized" rather
+    // than pointing at an id that no longer exists.
+    await db.runAsync(`UPDATE local_verses SET category_id = NULL WHERE category_id = ?`, [
+      categoryId,
+    ]);
+  });
+}
+
+/**
+ * Wipes and replaces all of a user's local verses/categories in one
+ * transaction. Used exclusively by Backup & Restore (src/lib/backup.ts)
+ * when restoring a snapshot — e.g. after signing in on a new device.
+ */
+export async function replaceAllLocalData(
+  userId: string,
+  verses: Verse[],
+  categories: Category[]
+) {
+  return enqueue(async () => {
+    const db = await getDatabase();
     await db.withTransactionAsync(async () => {
-      await db.runAsync("DELETE FROM verses_cache");
+      await db.runAsync(`DELETE FROM local_verses WHERE user_id = ?`, [userId]);
+      await db.runAsync(`DELETE FROM local_categories WHERE user_id = ?`, [userId]);
+
+      for (const category of categories) {
+        await db.runAsync(
+          `INSERT INTO local_categories (id,user_id,name,color,created_at) VALUES (?,?,?,?,?)`,
+          [category.id, category.user_id, category.name, category.color, category.created_at]
+        );
+      }
 
       for (const verse of verses) {
         await db.runAsync(
-          `
-          INSERT INTO verses_cache
-          (id,data,updated_at)
-          VALUES(?,?,?)
-          `,
-          [verse.id, JSON.stringify(verse), now]
+          `INSERT INTO local_verses
+           (id,user_id,reference,content,translation,category_id,status,date_started,date_mastered,reminder_interval_minutes,created_at)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+          [
+            verse.id,
+            verse.user_id,
+            verse.reference,
+            verse.content,
+            verse.translation,
+            verse.category_id,
+            verse.status,
+            verse.date_started,
+            verse.date_mastered,
+            verse.reminder_interval_minutes,
+            verse.created_at,
+          ]
         );
       }
     });
   });
 }
 
-export async function getCachedVerses(): Promise<Verse[]> {
+/**
+ * One-time upgrade path: if this device still has verses in the old
+ * Supabase-backed cache table but nothing yet in local_verses, copy them
+ * over so upgrading users don't see an empty app on first launch after
+ * the local-first update. Safe to call on every startup — it's a no-op
+ * once local_verses has data for this user.
+ */
+export async function migrateLegacyCacheIfNeeded(userId: string) {
   return enqueue(async () => {
     const db = await getDatabase();
 
-    const rows = await db.getAllAsync<{ data: string }>(
-      `
-      SELECT data
-      FROM verses_cache
-      ORDER BY updated_at DESC
-      `
+    const existing = await db.getFirstAsync<{ count: number }>(
+      `SELECT COUNT(*) as count FROM local_verses WHERE user_id = ?`,
+      [userId]
     );
+    if ((existing?.count ?? 0) > 0) return;
 
-    return rows.map((r) => JSON.parse(r.data));
-  });
-}
+    const legacyRows = await db.getAllAsync<{ data: string }>(`SELECT data FROM verses_cache`);
+    if (legacyRows.length === 0) return;
 
-export async function cacheVerse(verse: Verse) {
-  return enqueue(async () => {
-    const db = await getDatabase();
+    const legacyVerses: Verse[] = legacyRows
+      .map((r) => {
+        try {
+          return JSON.parse(r.data) as Verse;
+        } catch {
+          return null;
+        }
+      })
+      .filter((v): v is Verse => v !== null && v.user_id === userId);
 
-    await db.runAsync(
-      `
-      INSERT OR REPLACE INTO verses_cache
-      (id,data,updated_at)
-      VALUES(?,?,?)
-      `,
-      [verse.id, JSON.stringify(verse), new Date().toISOString()]
-    );
-  });
-}
-
-export async function removeCachedVerse(verseId: string) {
-  return enqueue(async () => {
-    const db = await getDatabase();
-
-    await db.runAsync(
-      `
-      DELETE FROM verses_cache
-      WHERE id=?
-      `,
-      [verseId]
-    );
-  });
-}
-
-export async function clearVerseCache() {
-  return enqueue(async () => {
-    const db = await getDatabase();
-
-    await db.runAsync(
-      `
-      DELETE FROM verses_cache
-      `
-    );
+    for (const verse of legacyVerses) {
+      await db.runAsync(
+        `INSERT OR IGNORE INTO local_verses
+         (id,user_id,reference,content,translation,category_id,status,date_started,date_mastered,reminder_interval_minutes,created_at)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+        [
+          verse.id,
+          verse.user_id,
+          verse.reference,
+          verse.content,
+          verse.translation,
+          verse.category_id,
+          verse.status,
+          verse.date_started,
+          verse.date_mastered,
+          verse.reminder_interval_minutes,
+          verse.created_at,
+        ]
+      );
+    }
   });
 }
 
@@ -319,6 +482,8 @@ export async function resetLocalDatabase() {
     const db = await getDatabase();
 
     await db.execAsync(`
+      DELETE FROM local_verses;
+      DELETE FROM local_categories;
       DELETE FROM verses_cache;
       DELETE FROM notification_schedule;
       DELETE FROM quiz_attempts;

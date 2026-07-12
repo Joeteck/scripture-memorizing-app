@@ -11,6 +11,7 @@ import { useVerses } from "@/hooks/useVerses";
 
 import SwipeDeck from "@/components/SwipeDeck";
 import { EmptyState } from "@/components/EmptyState";
+import { AppHeader } from "@/components/AppHeader";
 
 export default function Today() {
   const theme = useTheme();
@@ -46,8 +47,7 @@ export default function Today() {
         contentContainerStyle={styles.content}
         refreshControl={<RefreshControl refreshing={loading} onRefresh={refresh} />}
       >
-        <Text style={[type.sectionLabel, { color: theme.textSecondary }]}>{greeting}</Text>
-        <Text style={[type.screenTitle, { color: theme.text, marginTop: 6 }]}>Today's Memory</Text>
+        <AppHeader subtitle={greeting} title="Today's Memory" />
 
         {/* Stats */}
         <View style={[styles.statsCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>

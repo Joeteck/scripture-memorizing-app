@@ -115,7 +115,17 @@ export async function ensureNotificationPermission(): Promise<boolean> {
 // on scheduleVerseReminder below for why this matters.
 const LOOKAHEAD_COUNT = 20;
 
-export async function scheduleVerseReminder(verse: any) {
+/**
+ * Schedules a verse's reminder batch.
+ *
+ * `sendImmediate` controls whether an immediate "verse saved" push fires
+ * alongside the scheduled batch. This must be `true` only for genuine
+ * user actions (adding/updating a verse) and `false` for maintenance
+ * calls like topUpAllReminders() — otherwise every routine top-up
+ * silently re-sends the "saved" notification, which is exactly what
+ * produced the duplicate-notification bug this function used to have.
+ */
+export async function scheduleVerseReminder(verse: any, sendImmediate: boolean = true) {
   if (!Notifications) return;
 
   try {
@@ -124,16 +134,19 @@ export async function scheduleVerseReminder(verse: any) {
     await cancelVerseReminder(verse.id);
     await ensureNotificationChannel();
 
-    // Immediate notification so user knows the verse is saved
-    await Notifications.scheduleNotificationAsync({
-      content: {
-        title: verse.reference,
-        body: verse.content?.slice(0, 120) + (verse.content?.length > 120 ? "…" : ""),
-        data: { verseId: verse.id },
-        ...(Platform.OS === "android" ? { channelId: "verse-reminders" } : {}),
-      },
-      trigger: null, // immediate
-    });
+    if (sendImmediate) {
+      // Immediate notification so user knows the verse is saved. Only
+      // fires for a real user action, never during a background top-up.
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: verse.reference,
+          body: verse.content?.slice(0, 120) + (verse.content?.length > 120 ? "…" : ""),
+          data: { verseId: verse.id },
+          ...(Platform.OS === "android" ? { channelId: "verse-reminders" } : {}),
+        },
+        trigger: null, // immediate
+      });
+    }
 
     // Minimum 60 seconds (iOS hard requirement for repeating triggers;
     // Android allows shorter but we keep it consistent).
@@ -204,11 +217,20 @@ export async function cancelVerseReminder(verseId: string) {
  * notifications, then a quick per-verse check) and is what keeps
  * reminders flowing indefinitely despite each batch being finite.
  */
+// Guards against overlapping calls. topUpAllReminders is invoked both on
+// mount and from an AppState listener (see app/_layout.tsx); without this,
+// a cold start where both fire in quick succession could race — both read
+// "remaining < threshold" as true before either finishes rescheduling, and
+// each independently calls scheduleVerseReminder for the same verse.
+let topUpInFlight = false;
+
 export async function topUpAllReminders(
   verses: { id: string; reference: string; content: string; reminder_interval_minutes: number }[]
 ) {
   if (!Notifications || verses.length === 0) return;
+  if (topUpInFlight) return;
 
+  topUpInFlight = true;
   try {
     const { getNotificationIds } = await import("./db");
     const pending: any[] = await Notifications.getAllScheduledNotificationsAsync();
@@ -221,11 +243,14 @@ export async function topUpAllReminders(
       const remaining = storedIds.filter((id) => pendingIds.has(id)).length;
 
       if (remaining < topUpThreshold) {
-        await scheduleVerseReminder(verse);
+        // sendImmediate: false — this is maintenance, not a user action.
+        await scheduleVerseReminder(verse, false);
       }
     }
   } catch (e) {
     logError(e, { where: "topUpAllReminders" });
+  } finally {
+    topUpInFlight = false;
   }
 }
 

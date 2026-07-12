@@ -8,6 +8,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useVerses } from "@/hooks/useVerses";
 import { Seal } from "@/components/Seal";
 import { EmptyState } from "@/components/EmptyState";
+import { AppHeader } from "@/components/AppHeader";
 import { Verse } from "@/types";
 
 function formatDate(date?: string | null) {
@@ -43,8 +44,7 @@ export default function HistoryScreen() {
     <SafeAreaView edges={["top"]} style={[styles.container, { backgroundColor: theme.background }]}>
       {/* Fixed header */}
       <View style={[styles.header, { borderBottomColor: theme.border }]}>
-        <Text style={[type.sectionLabel, { color: theme.textSecondary }]}>HISTORY</Text>
-        <Text style={[type.screenTitle, { color: theme.text }]}>Mastered Verses</Text>
+        <AppHeader subtitle="HISTORY" title="Mastered Verses" />
 
         {/* Summary banner */}
         <View style={[styles.summaryBanner, { backgroundColor: theme.accentSoft }]}>

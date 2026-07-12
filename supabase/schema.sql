@@ -103,3 +103,91 @@ create policy "error_logs: anyone insert" on error_logs for insert with check (t
 
 create index if not exists error_logs_severity_created_idx
   on error_logs (severity, created_at desc);
+
+-- ────────────────────────────────────────────────────────────
+-- Local-first architecture: cloud-side tables
+--
+-- As of the local-first rewrite, `verses` and `categories` above are no
+-- longer written to on every add/edit/delete — the on-device SQLite
+-- database (src/lib/db.ts) is the source of truth for that data. They're
+-- left in place for backward compatibility (older installed builds, or
+-- anyone reading this data outside the app) but the app itself only
+-- touches the tables below for anything backup-related. See
+-- src/lib/backup.ts and app/backup.tsx.
+-- ────────────────────────────────────────────────────────────
+
+-- Subscription status lives on the profile — this is what the premium
+-- Backup & Restore offering (see PRD) will gate against once billing is
+-- wired up. `free` is fully functional today; the paid tiers exist here
+-- so that turning them on later is a billing-provider integration, not a
+-- schema change.
+alter table profiles add column if not exists subscription_tier text
+  default 'free' check (subscription_tier in ('free', 'backup_monthly', 'backup_annual'));
+alter table profiles add column if not exists subscription_status text
+  default 'active' check (subscription_status in ('active', 'canceled', 'past_due', 'none'));
+
+-- One row per user: their current backup preferences and the last time a
+-- backup actually succeeded. Read by app/backup.tsx's "View Last Backup
+-- Date" and used by src/lib/backup.ts to decide whether a scheduled
+-- backup (daily/weekly/monthly) is due.
+create table if not exists backup_metadata (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  enabled boolean not null default false,
+  frequency text not null default 'weekly' check (frequency in ('daily', 'weekly', 'monthly')),
+  last_backup_at timestamptz,
+  updated_at timestamptz default now()
+);
+alter table backup_metadata enable row level security;
+create policy "backup_metadata: owner read"   on backup_metadata for select using (auth.uid() = user_id);
+create policy "backup_metadata: owner write"  on backup_metadata for insert with check (auth.uid() = user_id);
+create policy "backup_metadata: owner update" on backup_metadata for update using (auth.uid() = user_id);
+
+-- The actual backup payload: one encrypted JSON blob per user, containing
+-- their verses/categories/preferences as of the last backup. Encrypted
+-- client-side before it ever leaves the device (see src/lib/backup.ts) —
+-- this table only ever holds ciphertext, so a database-level breach alone
+-- doesn't expose scripture content or any other user data.
+create table if not exists backup_snapshots (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  encrypted_data text not null,
+  verse_count int default 0,
+  created_at timestamptz default now()
+);
+alter table backup_snapshots enable row level security;
+create policy "backup_snapshots: owner read"   on backup_snapshots for select using (auth.uid() = user_id);
+create policy "backup_snapshots: owner write"  on backup_snapshots for insert with check (auth.uid() = user_id);
+create policy "backup_snapshots: owner update" on backup_snapshots for update using (auth.uid() = user_id);
+
+-- Which devices a user has backed up from/restored to — mainly useful for
+-- "you're currently signed in on 2 devices" type messaging later, and
+-- gives support something to look at if a user reports a restore issue.
+create table if not exists device_registrations (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users(id) on delete cascade not null,
+  device_name text,
+  platform text,
+  last_seen_at timestamptz default now(),
+  created_at timestamptz default now()
+);
+alter table device_registrations enable row level security;
+create policy "device_registrations: owner read"   on device_registrations for select using (auth.uid() = user_id);
+create policy "device_registrations: owner write"  on device_registrations for insert with check (auth.uid() = user_id);
+create policy "device_registrations: owner update" on device_registrations for update using (auth.uid() = user_id);
+
+-- Audit trail of backup/restore events — lets a user (or support) see
+-- "backed up successfully on device X" / "restore failed" history rather
+-- than only ever knowing the single most recent outcome.
+create table if not exists sync_history (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users(id) on delete cascade not null,
+  action text not null check (action in ('backup', 'restore')),
+  success boolean not null,
+  verse_count int,
+  error_message text,
+  created_at timestamptz default now()
+);
+alter table sync_history enable row level security;
+create policy "sync_history: owner read"   on sync_history for select using (auth.uid() = user_id);
+create policy "sync_history: owner write"  on sync_history for insert with check (auth.uid() = user_id);
+
+create index if not exists sync_history_user_created_idx on sync_history (user_id, created_at desc);

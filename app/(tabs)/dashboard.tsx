@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo } from "react";
 import { View, ScrollView, RefreshControl, StyleSheet } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -6,18 +6,18 @@ import { useTheme, spacing } from "@/theme";
 import { useAuth } from "@/hooks/useAuth";
 import { useVerses } from "@/hooks/useVerses";
 import { useStreak } from "@/hooks/useStreak";
+import { useDrawer } from "@/lib/drawer";
 
 import { DashboardHeader } from "@/components/DashboardHeader";
 import { ProgressRing } from "@/components/ProgressRing";
 import { StatsCard } from "@/components/StatsCard";
 import { StreakCard } from "@/components/StreakCard";
 import { QuickActions } from "@/components/QuickActions";
-import { DrawerMenu } from "@/components/DrawerMenu";
 
 export default function Dashboard() {
   const theme = useTheme();
-  const { user, signOut } = useAuth();
-  const [drawerOpen, setDrawerOpen] = useState(false);
+  const { user } = useAuth();
+  const { open: openDrawer } = useDrawer();
 
   const { learning, mastered, categories, loading, refresh } = useVerses(user?.id ?? null);
   const streak = useStreak(useMemo(() => [...learning, ...mastered], [learning, mastered]));
@@ -36,8 +36,8 @@ export default function Dashboard() {
         <DashboardHeader
           userName={userName}
           userEmail={user?.email}
-          onAvatarPress={() => setDrawerOpen(true)}
-          onMenuPress={() => setDrawerOpen(true)}
+          onAvatarPress={openDrawer}
+          onMenuPress={openDrawer}
         />
 
         <ProgressRing completed={mastered.length} total={learning.length + mastered.length} />
@@ -56,14 +56,6 @@ export default function Dashboard() {
 
         <QuickActions />
       </ScrollView>
-
-      <DrawerMenu
-        visible={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
-        userName={userName}
-        userEmail={user?.email}
-        onSignOut={signOut}
-      />
     </SafeAreaView>
   );
 }
