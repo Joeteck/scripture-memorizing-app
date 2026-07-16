@@ -4,12 +4,13 @@
 // experience is free and fully offline (see src/hooks/useVerses.ts), and
 // what this screen sells is *disaster recovery* — an encrypted copy of
 // your data safely in the cloud, restorable on a new or reinstalled
-// device. Subscription gating for this isn't wired up yet (see
-// subscription_tier on the profiles table in supabase/schema.sql for the
-// column it'll read from), so today everyone can use it — the screen is
-// built so adding a paywall later is a small change here, not a rewrite.
+// device. Every actual cloud action below (enable, back up, restore,
+// scheduled backups) is gated behind `isPremium` from useSubscription —
+// a non-subscriber can see and explore this whole screen, but tapping
+// any of those routes them to app/paywall.tsx first. See src/lib/purchases.ts
+// for how entitlement is actually determined.
 import React, { useCallback, useState } from "react";
-import { ScrollView, StyleSheet, Text, View, Pressable, Switch, ActivityIndicator } from "react-native";
+import { ScrollView, StyleSheet, Text, View, Pressable, Switch, ActivityIndicator, TextInput } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -17,6 +18,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useTheme, type, spacing } from "@/theme";
 import { useAuth } from "@/hooks/useAuth";
 import { useVerses } from "@/hooks/useVerses";
+import { useSubscription } from "@/hooks/useSubscription";
 import { useToast } from "@/lib/toast";
 import { useConfirm } from "@/lib/confirm";
 import { logError } from "@/lib/monitoring";
@@ -27,11 +29,18 @@ import {
   disableBackup,
   setFrequency,
   getSettings,
+  isPassphraseProtected,
+  setPassphraseProtected,
 } from "@/lib/backup";
+import {
+  registerBackgroundBackupTask,
+  unregisterBackgroundBackupTask,
+} from "@/lib/backgroundBackup";
 import { BackupFrequency } from "@/lib/preferences";
 
 import { CategoryPill } from "@/components/CategoryPill";
 import { PrimaryButton } from "@/components/PrimaryButton";
+import { ModalHeader } from "@/components/ModalHeader";
 
 const FREQUENCY_OPTIONS: { label: string; value: BackupFrequency }[] = [
   { label: "Daily", value: "daily" },
@@ -55,6 +64,7 @@ export default function BackupScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const { refresh: refreshVerses } = useVerses(user?.id ?? null);
+  const { isPremium, loading: subscriptionLoading } = useSubscription(user?.id ?? null);
   const toast = useToast();
   const confirm = useConfirm();
 
@@ -65,14 +75,17 @@ export default function BackupScreen() {
   const [backingUp, setBackingUp] = useState(false);
   const [restoring, setRestoring] = useState(false);
   const [togglingEnabled, setTogglingEnabled] = useState(false);
+  const [passphraseProtected, setPassphraseProtectedState] = useState(false);
+  const [passphrase, setPassphrase] = useState("");
 
   const loadSettings = useCallback(async () => {
     setLoadingSettings(true);
     try {
-      const settings = await getSettings();
+      const [settings, protectedFlag] = await Promise.all([getSettings(), isPassphraseProtected()]);
       setEnabled(settings.enabled);
       setFrequencyState(settings.frequency);
       setLastBackupAtState(settings.lastBackupAt);
+      setPassphraseProtectedState(protectedFlag);
     } catch (e) {
       logError(e, { where: "backup screen: loadSettings" });
     } finally {
@@ -88,13 +101,21 @@ export default function BackupScreen() {
 
   async function handleToggleEnabled(next: boolean) {
     if (!user) return;
+
+    if (next && !isPremium) {
+      router.push("/paywall");
+      return;
+    }
+
     setTogglingEnabled(true);
     try {
       if (next) {
         await enableBackup(user.id);
+        await registerBackgroundBackupTask();
         toast.showSuccess("Cloud Backup Enabled", "Your verses will be backed up on your chosen schedule.");
       } else {
         await disableBackup(user.id);
+        await unregisterBackgroundBackupTask();
         toast.showInfo("Cloud Backup Disabled", "Your data stays local. Existing backups aren't deleted.");
       }
       setEnabled(next);
@@ -116,11 +137,31 @@ export default function BackupScreen() {
     }
   }
 
+  async function handleTogglePassphraseProtected(next: boolean) {
+    await setPassphraseProtected(next);
+    setPassphraseProtectedState(next);
+    setPassphrase("");
+    if (next) {
+      toast.showInfo(
+        "Extra Protection Enabled",
+        "Scheduled backups are paused — back up manually with your passphrase from now on."
+      );
+    }
+  }
+
   async function handleBackupNow() {
     if (!user) return;
+    if (!isPremium) {
+      router.push("/paywall");
+      return;
+    }
+    if (passphraseProtected && !passphrase.trim()) {
+      toast.showError("Passphrase Required", "Enter your backup passphrase to continue.");
+      return;
+    }
     setBackingUp(true);
     try {
-      const { verseCount } = await backupNow(user.id);
+      const { verseCount } = await backupNow(user.id, passphraseProtected ? passphrase.trim() : undefined);
       setLastBackupAtState(new Date().toISOString());
       toast.showSuccess(
         "Backup Complete",
@@ -136,6 +177,14 @@ export default function BackupScreen() {
 
   async function handleRestore() {
     if (!user) return;
+    if (!isPremium) {
+      router.push("/paywall");
+      return;
+    }
+    if (passphraseProtected && !passphrase.trim()) {
+      toast.showError("Passphrase Required", "Enter your backup passphrase to continue.");
+      return;
+    }
 
     const ok = await confirm({
       title: "Restore Previous Backup?",
@@ -149,7 +198,10 @@ export default function BackupScreen() {
 
     setRestoring(true);
     try {
-      const { verseCount } = await restoreLatestBackup(user.id);
+      const { verseCount } = await restoreLatestBackup(
+        user.id,
+        passphraseProtected ? passphrase.trim() : undefined
+      );
       await refreshVerses();
       toast.showSuccess(
         "Restore Complete",
@@ -165,12 +217,7 @@ export default function BackupScreen() {
 
   return (
     <SafeAreaView edges={["top"]} style={[styles.container, { backgroundColor: theme.background }]}>
-      <View style={styles.headerRow}>
-        <Pressable onPress={() => router.back()} hitSlop={10} style={[styles.backBtn, { backgroundColor: theme.accentSoft }]}>
-          <Ionicons name="chevron-back" size={22} color={theme.accent} />
-        </Pressable>
-        <Text style={[type.screenTitle, { color: theme.text, marginLeft: 12 }]}>Backup & Restore</Text>
-      </View>
+      <ModalHeader title="Backup & Restore" />
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ padding: 20, paddingTop: 0, paddingBottom: 60 }}>
         {/* How it works */}
@@ -181,6 +228,28 @@ export default function BackupScreen() {
             encrypted safety net — useful if you lose or switch devices.
           </Text>
         </View>
+
+        {/* Premium status */}
+        {!subscriptionLoading && !isPremium && (
+          <Pressable
+            onPress={() => router.push("/paywall")}
+            style={[
+              styles.infoCard,
+              { backgroundColor: theme.background, borderWidth: 1, borderColor: theme.accent, marginTop: 12 },
+            ]}
+          >
+            <Ionicons name="sparkles-outline" size={20} color={theme.accent} />
+            <View style={{ marginLeft: 10, flex: 1 }}>
+              <Text style={[type.body, { color: theme.text, fontWeight: "700" }]}>
+                Backup & Restore is a premium feature
+              </Text>
+              <Text style={[type.caption, { color: theme.textSecondary, marginTop: 2 }]}>
+                Tap to see plans and subscribe.
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={theme.accent} />
+          </Pressable>
+        )}
 
         {/* Enable / disable */}
         <View style={[styles.card, { backgroundColor: theme.surface, marginTop: 18 }]}>
@@ -233,6 +302,43 @@ export default function BackupScreen() {
           </View>
         </View>
 
+        {/* Advanced: optional passphrase protection */}
+        <View style={[styles.card, { backgroundColor: theme.surface }]}>
+          <View style={styles.rowBetween}>
+            <View style={{ flex: 1, marginRight: 12 }}>
+              <Text style={[styles.label, { color: theme.text }]}>Extra Passphrase Protection</Text>
+              <Text style={[type.caption, { color: theme.textSecondary, marginTop: 2 }]}>
+                Advanced — encrypts backups with a passphrase only you know, instead of your account
+                alone. Requires entering it for every backup/restore, so scheduled backups pause while
+                this is on.
+              </Text>
+            </View>
+            <Switch
+              value={passphraseProtected}
+              onValueChange={handleTogglePassphraseProtected}
+              trackColor={{ false: theme.border, true: theme.accent }}
+              thumbColor="#fff"
+            />
+          </View>
+
+          {passphraseProtected && (
+            <TextInput
+              value={passphrase}
+              onChangeText={setPassphrase}
+              placeholder="Enter your backup passphrase"
+              placeholderTextColor={theme.textSecondary}
+              secureTextEntry
+              autoCapitalize="none"
+              autoCorrect={false}
+              accessibilityLabel="Backup passphrase"
+              style={[
+                styles.passphraseInput,
+                { color: theme.text, borderColor: theme.border, backgroundColor: theme.background },
+              ]}
+            />
+          )}
+        </View>
+
         {/* Manual actions */}
         <PrimaryButton
           label="Back Up Now"
@@ -262,8 +368,6 @@ export default function BackupScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  headerRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: 20, paddingBottom: 16 },
-  backBtn: { width: 40, height: 40, borderRadius: 20, alignItems: "center", justifyContent: "center" },
   infoCard: { flexDirection: "row", alignItems: "flex-start", borderRadius: 16, padding: 16 },
   card: { borderRadius: 18, padding: 18, marginBottom: 18 },
   label: { fontSize: 16, fontWeight: "700" },
@@ -280,4 +384,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   restoreText: { fontSize: 15, fontWeight: "700" },
+  passphraseInput: {
+    marginTop: 14,
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 15,
+  },
 });

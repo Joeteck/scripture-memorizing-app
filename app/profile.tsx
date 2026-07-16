@@ -15,6 +15,7 @@ import { useConfirm } from "@/lib/confirm";
 
 import { PrimaryButton } from "@/components/PrimaryButton";
 import { CategoryPill } from "@/components/CategoryPill";
+import { ModalHeader } from "@/components/ModalHeader";
 
 const REMINDER_OPTIONS = [
   { label: "15 min", value: 15 },
@@ -146,13 +147,7 @@ export default function ProfileScreen() {
 
   return (
     <SafeAreaView edges={["top"]} style={[styles.flex, { backgroundColor: theme.background }]}>
-      <View style={styles.headerRow}>
-        <Pressable onPress={() => router.back()} hitSlop={12} style={styles.backButton}>
-          <Ionicons name="chevron-back" size={26} color={theme.text} />
-        </Pressable>
-        <Text style={[type.screenTitle, { color: theme.text }]}>Profile</Text>
-        <View style={{ width: 26 }} />
-      </View>
+      <ModalHeader title="Profile" />
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         {/* Account header */}
@@ -346,16 +341,7 @@ export default function ProfileScreen() {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 20,
-    paddingTop: 8,
-    paddingBottom: 12,
-  },
-  backButton: { padding: 4 },
-  content: { padding: 20, paddingTop: 4, paddingBottom: 60 },
+  content: { padding: 20, paddingTop: 0, paddingBottom: 60 },
   accountRow: { flexDirection: "row", alignItems: "center", marginTop: 8 },
   avatar: { width: 56, height: 56, borderRadius: 28, alignItems: "center", justifyContent: "center" },
   accountText: { marginLeft: 16, flex: 1 },

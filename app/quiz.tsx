@@ -21,6 +21,7 @@ import { useToast } from "@/lib/toast";
 import { useConfirm } from "@/lib/confirm";
 import { EmptyState } from "@/components/EmptyState";
 import { PrimaryButton } from "@/components/PrimaryButton";
+import { ModalHeader } from "@/components/ModalHeader";
 
 // Perfect scores in a row before we suggest marking the verse mastered.
 const MASTERY_STREAK_THRESHOLD = 3;
@@ -49,13 +50,7 @@ export default function QuizScreen() {
   if (!verse || !quiz) {
     return (
       <SafeAreaView edges={["top"]} style={[styles.flex, { backgroundColor: theme.background }]}>
-        <View style={styles.header}>
-          <Pressable onPress={() => router.back()} hitSlop={12}>
-            <Ionicons name="chevron-back" size={26} color={theme.text} />
-          </Pressable>
-          <Text style={{ fontSize: 18, fontWeight: "800", color: theme.text }}>Test Yourself</Text>
-          <View style={{ width: 26 }} />
-        </View>
+        <ModalHeader title="Test Yourself" />
         <EmptyState
           icon="alert-circle-outline"
           title="Verse not found"
@@ -155,13 +150,7 @@ export default function QuizScreen() {
 
   return (
     <SafeAreaView edges={["top"]} style={[styles.flex, { backgroundColor: theme.background }]}>
-      <View style={styles.header}>
-        <Pressable onPress={() => router.back()} hitSlop={12}>
-          <Ionicons name="chevron-back" size={26} color={theme.text} />
-        </Pressable>
-        <Text style={{ fontSize: 18, fontWeight: "800", color: theme.text }}>Test Yourself</Text>
-        <View style={{ width: 26 }} />
-      </View>
+      <ModalHeader title="Test Yourself" />
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         {category ? (
@@ -301,14 +290,7 @@ export default function QuizScreen() {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-  },
-  content: { padding: 20, paddingBottom: 60 },
+  content: { padding: 20, paddingTop: 0, paddingBottom: 60 },
   categoryChip: {
     alignSelf: "flex-start",
     paddingHorizontal: 10,

@@ -203,8 +203,14 @@ export default function ResetPasswordScreen() {
                   secureTextEntry={!showPw}
                   placeholderTextColor={theme.textSecondary}
                   style={[styles.input, { color: theme.text }]}
+                  accessibilityLabel="New password"
                 />
-                <Pressable onPress={() => setShowPw((v) => !v)} hitSlop={8}>
+                <Pressable
+                  onPress={() => setShowPw((v) => !v)}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel={showPw ? "Hide password" : "Show password"}
+                >
                   <Ionicons name={showPw ? "eye-off" : "eye"} size={20} color={theme.textSecondary} />
                 </Pressable>
               </View>
@@ -218,6 +224,7 @@ export default function ResetPasswordScreen() {
                   secureTextEntry={!showPw}
                   placeholderTextColor={theme.textSecondary}
                   style={[styles.input, { color: theme.text }]}
+                  accessibilityLabel="Confirm new password"
                 />
                 {confirm.length > 0 && (
                   <Ionicons

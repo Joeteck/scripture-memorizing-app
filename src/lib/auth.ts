@@ -31,6 +31,8 @@ export async function signUp(email: string, password: string) {
 }
 
 export async function signOut() {
+  const { resetPurchasesUser } = await import("@/lib/purchases");
+  await resetPurchasesUser();
   return supabase.auth.signOut();
 }
 

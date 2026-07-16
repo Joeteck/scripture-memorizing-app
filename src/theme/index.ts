@@ -4,6 +4,7 @@ import type { ThemeMode } from "@/lib/preferences";
 
 export { type, fonts } from "./typography";
 export { spacing, radius, shadows };
+export { getReadableTextColor } from "./contrast";
 export type { Theme, ThemeMode };
 export { ThemeProvider };
 

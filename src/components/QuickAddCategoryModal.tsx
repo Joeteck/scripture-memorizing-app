@@ -74,7 +74,7 @@ export function QuickAddCategoryModal({ visible, onClose, onCreate }: Props) {
         >
           <View style={styles.header}>
             <Text style={[styles.title, { color: theme.text }]}>New Category</Text>
-            <Pressable onPress={onClose} hitSlop={10}>
+            <Pressable onPress={onClose} hitSlop={10} accessibilityRole="button" accessibilityLabel="Close">
               <Ionicons name="close" size={22} color={theme.textSecondary} />
             </Pressable>
           </View>
@@ -86,6 +86,7 @@ export function QuickAddCategoryModal({ visible, onClose, onCreate }: Props) {
             placeholderTextColor={theme.textSecondary}
             style={[styles.input, { color: theme.text, borderColor: theme.border, backgroundColor: theme.surface }]}
             autoFocus
+            accessibilityLabel="Category name"
           />
 
           <Text style={[styles.label, { color: theme.text }]}>Color</Text>

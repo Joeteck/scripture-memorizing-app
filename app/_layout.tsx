@@ -1,5 +1,5 @@
 import "react-native-gesture-handler";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Stack, useRouter, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import * as Linking from "expo-linking";
@@ -180,23 +180,42 @@ function RootLayout() {
   // on scheduled occurrences and extend it. Also runs once on mount so a
   // fresh sign-in or cold start tops up immediately rather than waiting
   // for the next foreground transition.
-  useEffect(() => {
-    if (!appReady || !session || learning.length === 0) return;
+  //
+  // IMPORTANT: this effect must NOT depend on `learning` directly.
+  // useVerses() returns a new array reference on every store mutation —
+  // adding a verse, marking one mastered, deleting one, anywhere in the
+  // app — because the shared store's `verses` array is replaced wholesale
+  // on every change (see src/hooks/useVerses.ts). If `learning` were a
+  // dependency here, this effect would tear down and recreate the
+  // AppState subscription, and re-run the "mount" top-up call, on every
+  // single verse mutation app-wide — not just real foreground transitions.
+  // That's exactly what was producing duplicate/overlapping reminder
+  // notifications for verses whose batch had just been (re)scheduled
+  // moments earlier by an unrelated action. A ref sidesteps this: the
+  // effect subscribes once per session, and always reads the latest
+  // verse list when it actually needs it.
+  const learningRef = useRef(learning);
+  learningRef.current = learning;
 
-    topUpAllReminders(learning).catch((e) => {
-      logError(e, { where: "topUpAllReminders: mount" });
-    });
+  useEffect(() => {
+    if (!appReady || !session) return;
+
+    if (learningRef.current.length > 0) {
+      topUpAllReminders(learningRef.current).catch((e) => {
+        logError(e, { where: "topUpAllReminders: mount" });
+      });
+    }
 
     const sub = AppState.addEventListener("change", (state) => {
-      if (state === "active") {
-        topUpAllReminders(learning).catch((e) => {
+      if (state === "active" && learningRef.current.length > 0) {
+        topUpAllReminders(learningRef.current).catch((e) => {
           logError(e, { where: "topUpAllReminders: foreground" });
         });
       }
     });
 
     return () => sub.remove();
-  }, [appReady, session, learning]);
+  }, [appReady, session]);
 
   // Cloud backup is opt-in and schedule-driven (see src/lib/backup.ts):
   // it never runs on its own unless the user turned on Backup & Restore
@@ -210,6 +229,17 @@ function RootLayout() {
     maybeAutoBackup(session.user.id).catch((e) => {
       logError(e, { where: "maybeAutoBackup: mount" });
     });
+
+    import("@/lib/purchases").then(({ initPurchases }) => initPurchases(session.user.id));
+
+    import("@/lib/backup").then(({ getSettings }) =>
+      getSettings().then((settings) => {
+        if (!settings.enabled) return;
+        import("@/lib/backgroundBackup").then(({ registerBackgroundBackupTask }) =>
+          registerBackgroundBackupTask()
+        );
+      })
+    );
 
     const sub = AppState.addEventListener("change", (state) => {
       if (state === "active") {
@@ -319,6 +349,10 @@ function RootLayout() {
                 />
                 <Stack.Screen
                   name="backup"
+                  options={{ presentation: "modal" }}
+                />
+                <Stack.Screen
+                  name="paywall"
                   options={{ presentation: "modal" }}
                 />
                 <Stack.Screen

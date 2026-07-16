@@ -38,10 +38,10 @@ export function Seal({ date }: Props) {
       <Ionicons
         name="checkmark-circle"
         size={24}
-        color="#fff"
+        color={theme.onAccent}
       />
 
-      <Text style={styles.date}>
+      <Text style={[styles.date, { color: theme.onAccent }]}>
         {formatDate(date)}
       </Text>
     </View>
@@ -62,8 +62,6 @@ const styles = StyleSheet.create({
   },
 
   date: {
-    color: "#FFFFFF",
-
     fontSize: 11,
 
     fontWeight: "700",

@@ -6,6 +6,7 @@ import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import Constants from "expo-constants";
 import { useTheme, type, spacing } from "@/theme";
+import { ModalHeader } from "@/components/ModalHeader";
 
 // Developer info: the name below is already public in app/donate.tsx, so
 // it's carried over here rather than left blank. Everything else
@@ -63,13 +64,7 @@ export default function AboutScreen() {
 
   return (
     <SafeAreaView edges={["top"]} style={[styles.flex, { backgroundColor: theme.background }]}>
-      <View style={styles.header}>
-        <Pressable onPress={() => router.back()} hitSlop={12}>
-          <Ionicons name="chevron-back" size={26} color={theme.text} />
-        </Pressable>
-        <Text style={{ fontSize: 20, fontWeight: "800", color: theme.text }}>About</Text>
-        <View style={{ width: 26 }} />
-      </View>
+      <ModalHeader title="About" />
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={[styles.iconWrap, { backgroundColor: theme.accentSoft }]}>
@@ -149,19 +144,31 @@ export default function AboutScreen() {
             <Pressable
               style={styles.linkRow}
               onPress={() => RNLinking.openURL(`mailto:${DEVELOPER.email}`)}
+              accessibilityRole="link"
+              accessibilityLabel={`Email ${DEVELOPER.email}`}
             >
               <Ionicons name="mail-outline" size={18} color={theme.accent} />
               <Text style={[styles.linkText, { color: theme.accent }]}>{DEVELOPER.email}</Text>
             </Pressable>
           ) : null}
           {DEVELOPER.website ? (
-            <Pressable style={styles.linkRow} onPress={() => RNLinking.openURL(DEVELOPER.website)}>
+            <Pressable
+              style={styles.linkRow}
+              onPress={() => RNLinking.openURL(DEVELOPER.website)}
+              accessibilityRole="link"
+              accessibilityLabel="Developer website"
+            >
               <Ionicons name="globe-outline" size={18} color={theme.accent} />
               <Text style={[styles.linkText, { color: theme.accent }]}>{DEVELOPER.website}</Text>
             </Pressable>
           ) : null}
           {DEVELOPER.github ? (
-            <Pressable style={styles.linkRow} onPress={() => RNLinking.openURL(DEVELOPER.github)}>
+            <Pressable
+              style={styles.linkRow}
+              onPress={() => RNLinking.openURL(DEVELOPER.github)}
+              accessibilityRole="link"
+              accessibilityLabel="Developer GitHub profile"
+            >
               <Ionicons name="logo-github" size={18} color={theme.accent} />
               <Text style={[styles.linkText, { color: theme.accent }]}>{DEVELOPER.github}</Text>
             </Pressable>
@@ -170,11 +177,21 @@ export default function AboutScreen() {
 
                 {/* Legal */}
         <Section icon="document-text-outline" title="Legal" theme={theme}>
-          <Pressable style={styles.linkRow} onPress={() => router.push("/privacy-policy")}>
+          <Pressable
+            style={styles.linkRow}
+            onPress={() => router.push("/privacy-policy")}
+            accessibilityRole="button"
+            accessibilityLabel="Privacy Policy"
+          >
             <Ionicons name="shield-checkmark-outline" size={18} color={theme.accent} />
             <Text style={[styles.linkText, { color: theme.accent }]}>Privacy Policy</Text>
           </Pressable>
-          <Pressable style={styles.linkRow} onPress={() => router.push("/terms")}>
+          <Pressable
+            style={styles.linkRow}
+            onPress={() => router.push("/terms")}
+            accessibilityRole="button"
+            accessibilityLabel="Terms of Service"
+          >
             <Ionicons name="document-outline" size={18} color={theme.accent} />
             <Text style={[styles.linkText, { color: theme.accent }]}>Terms of Service</Text>
           </Pressable>
@@ -192,8 +209,7 @@ export default function AboutScreen() {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingVertical: 12 },
-  content: { padding: 20, paddingBottom: 60 },
+  content: { padding: 20, paddingTop: 0, paddingBottom: 60 },
   iconWrap: { width: 90, height: 90, borderRadius: 45, alignItems: "center", justifyContent: "center", alignSelf: "center" },
   intro: { lineHeight: 24, textAlign: "center", marginTop: 16, marginBottom: 24, fontSize: 15 },
   section: { borderRadius: 18, padding: 18, marginBottom: 16 },

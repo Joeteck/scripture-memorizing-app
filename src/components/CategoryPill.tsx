@@ -1,6 +1,7 @@
-import React from "react";
+import React, { memo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { getReadableTextColor } from "@/theme";
 
 interface Props {
   label: string;
@@ -10,10 +11,20 @@ interface Props {
   icon?: keyof typeof Ionicons.glyphMap;
 }
 
-export function CategoryPill({ label, color, selected, onPress, icon }: Props) {
+function CategoryPillComponent({ label, color, selected, onPress, icon }: Props) {
+  // `color` can be theme.accent (passed for translation/reminder/frequency
+  // pills) or an arbitrary per-category custom color — either way, this
+  // computes real contrast against it rather than assuming white always
+  // reads clearly, which it doesn't (see PHASE_3_NOTES.md's contrast audit).
+  const selectedTextColor = getReadableTextColor(color);
+
   return (
     <Pressable
       onPress={onPress}
+      hitSlop={6}
+      accessibilityRole={onPress ? "button" : undefined}
+      accessibilityLabel={label || undefined}
+      accessibilityState={onPress ? { selected: !!selected } : undefined}
       style={[
         styles.pill,
         {
@@ -23,10 +34,15 @@ export function CategoryPill({ label, color, selected, onPress, icon }: Props) {
       ]}
     >
       {icon && (
-        <Ionicons name={icon} size={14} color={selected ? "#fff" : color} style={{ marginRight: label ? 4 : 0 }} />
+        <Ionicons
+          name={icon}
+          size={14}
+          color={selected ? selectedTextColor : color}
+          style={{ marginRight: label ? 4 : 0 }}
+        />
       )}
       {label ? (
-        <Text style={[styles.label, { color: selected ? "#fff" : color }]}>{label}</Text>
+        <Text style={[styles.label, { color: selected ? selectedTextColor : color }]}>{label}</Text>
       ) : null}
     </Pressable>
   );
@@ -45,3 +61,9 @@ const styles = StyleSheet.create({
   },
   label: { fontSize: 13, fontWeight: "700" },
 });
+
+// Pills are rendered in tight lists (every category, translation, and
+// reminder-interval option) that all re-render together whenever their
+// parent screen's state changes — memoizing means a pill only re-renders
+// when its own props (selection state, color, label) actually change.
+export const CategoryPill = memo(CategoryPillComponent);

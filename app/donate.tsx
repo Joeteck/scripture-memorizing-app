@@ -2,12 +2,12 @@
 import React from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import * as Clipboard from 'expo-clipboard';
 import { useTheme, type } from "@/theme";
 import { useToast } from "@/lib/toast";
 import { logError } from "@/lib/monitoring";
+import { ModalHeader } from "@/components/ModalHeader";
 
 const ACCOUNTS = [
   { bank: "Stanbic IBTC Bank", name: "Adeyoju Ibukunoluwa Joel", number: "0034563949", id: "1" },
@@ -17,7 +17,6 @@ const ACCOUNTS = [
 
 export default function DonateScreen() {
   const theme = useTheme();
-  const router = useRouter();
   const toast = useToast();
 
   async function copy(text: string) {
@@ -32,18 +31,14 @@ export default function DonateScreen() {
 
   return (
     <SafeAreaView edges={["top"]} style={[styles.flex, { backgroundColor: theme.background }]}>
-      <View style={styles.header}>
-        <Pressable onPress={() => router.back()} hitSlop={12}>
-          <Ionicons name="chevron-back" size={26} color={theme.text} />
-        </Pressable>
-        <Text style={[{ fontSize: 20, fontWeight: "800", color: theme.text }]}>Support the App</Text>
-        <View style={{ width: 26 }} />
-      </View>
+      <ModalHeader title="Support the App" />
 
-      <ScrollView contentContainerStyle={styles.content}>
-        {/* Heart icon */}
-        <View style={[styles.iconWrap, { backgroundColor: "#FFF0F0" }]}>
-          <Ionicons name="heart" size={48} color="#E74C3C" />
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        {/* Heart icon — theme.errorSoft/theme.error already give a warm red
+            that adapts correctly in dark mode, unlike the hardcoded hex
+            values this used to have. */}
+        <View style={[styles.iconWrap, { backgroundColor: theme.errorSoft }]}>
+          <Ionicons name="heart" size={48} color={theme.error} />
         </View>
 
         <Text style={[type.screenTitle, { color: theme.text, textAlign: "center", marginTop: 16 }]}>
@@ -59,7 +54,13 @@ export default function DonateScreen() {
             <Text style={[{ color: theme.text, fontWeight: "600", marginTop: 4 }]}>{acc.name}</Text>
             <View style={styles.accountRow}>
               <Text style={[styles.accountNum, { color: theme.text }]}>{acc.number}</Text>
-              <Pressable onPress={() => copy(acc.number)} hitSlop={8} style={[styles.copyBtn, { backgroundColor: theme.accentSoft }]}>
+              <Pressable
+                onPress={() => copy(acc.number)}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel={`Copy ${acc.bank} account number`}
+                style={[styles.copyBtn, { backgroundColor: theme.accentSoft }]}
+              >
                 <Ionicons name="copy-outline" size={16} color={theme.accent} />
                 <Text style={[{ color: theme.accent, fontWeight: "700", fontSize: 13 }]}> Copy</Text>
               </Pressable>
@@ -77,8 +78,7 @@ export default function DonateScreen() {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingVertical: 12 },
-  content: { padding: 20, paddingBottom: 60, alignItems: "stretch" },
+  content: { padding: 20, paddingTop: 0, paddingBottom: 60, alignItems: "stretch" },
   iconWrap: { width: 90, height: 90, borderRadius: 45, alignItems: "center", justifyContent: "center", alignSelf: "center" },
   card: { borderRadius: 18, padding: 18, marginBottom: 16, borderWidth: 1 },
   bankName: { fontSize: 16, fontWeight: "800" },
@@ -86,3 +86,4 @@ const styles = StyleSheet.create({
   accountNum: { fontSize: 20, fontWeight: "700", letterSpacing: 1 },
   copyBtn: { flexDirection: "row", alignItems: "center", paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999 },
 });
+

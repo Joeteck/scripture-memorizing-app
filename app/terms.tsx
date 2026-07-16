@@ -8,9 +8,9 @@
 import React from "react";
 import { ScrollView, StyleSheet, Text, View, Pressable, Linking as RNLinking } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme, type, spacing } from "@/theme";
+import { ModalHeader } from "@/components/ModalHeader";
 
 const CONTACT_EMAIL = "adeyojuibukunoluwa1@gmail.com"; // e.g. "you@example.com" — keep in sync with app/privacy-policy.tsx
 const LAST_UPDATED = "July 2026";
@@ -35,17 +35,10 @@ function Section({
 
 export default function TermsScreen() {
   const theme = useTheme();
-  const router = useRouter();
 
   return (
     <SafeAreaView edges={["top"]} style={[styles.flex, { backgroundColor: theme.background }]}>
-      <View style={styles.header}>
-        <Pressable onPress={() => router.back()} hitSlop={12}>
-          <Ionicons name="chevron-back" size={26} color={theme.text} />
-        </Pressable>
-        <Text style={{ fontSize: 20, fontWeight: "800", color: theme.text }}>Terms of Service</Text>
-        <View style={{ width: 26 }} />
-      </View>
+      <ModalHeader title="Terms of Service" />
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <Text style={[styles.updated, { color: theme.textSecondary }]}>
@@ -156,14 +149,7 @@ export default function TermsScreen() {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-  },
-  content: { padding: 20, paddingBottom: 60 },
+  content: { padding: 20, paddingTop: 0, paddingBottom: 60 },
   updated: { fontSize: 12, marginBottom: 12, fontWeight: "600" },
   intro: { fontSize: 14, lineHeight: 21, marginBottom: 20 },
   section: { marginBottom: spacing.lg },

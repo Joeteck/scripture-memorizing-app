@@ -104,7 +104,7 @@ export default function Today() {
             ]}
           >
             <View style={[styles.testIcon, { backgroundColor: theme.accent }]}>
-              <Ionicons name="flash" size={22} color="#FFFFFF" />
+              <Ionicons name="flash" size={22} color={theme.onAccent} />
             </View>
             <View style={{ flex: 1, marginLeft: 14 }}>
               <Text style={[type.bodyBold, { color: theme.text }]}>Test Yourself</Text>

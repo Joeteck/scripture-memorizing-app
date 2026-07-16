@@ -421,16 +421,29 @@ export async function saveNotificationIds(verseId: string, notificationIds: stri
   return enqueue(async () => {
     const db = await getDatabase();
 
-    for (const notificationId of notificationIds) {
-      await db.runAsync(
-        `
-        INSERT INTO notification_schedule
-        (verse_id,notification_id)
-        VALUES(?,?)
-        `,
-        [verseId, notificationId]
-      );
-    }
+    // Replace, not append. This function is always meant to represent
+    // "this verse's current full set of scheduled notification ids" —
+    // callers (scheduleVerseReminder) already cancel + clear the previous
+    // batch first, but doing the delete here too, in the same
+    // transaction as the insert, means this table can never end up with
+    // stale rows from a previous batch even if that invariant is ever
+    // violated by a future caller. Stale rows here are exactly what would
+    // make topUpAllReminders() miscount a verse's remaining reminders and
+    // trigger an unnecessary, overlapping re-schedule.
+    await db.withTransactionAsync(async () => {
+      await db.runAsync(`DELETE FROM notification_schedule WHERE verse_id = ?`, [verseId]);
+
+      for (const notificationId of notificationIds) {
+        await db.runAsync(
+          `
+          INSERT INTO notification_schedule
+          (verse_id,notification_id)
+          VALUES(?,?)
+          `,
+          [verseId, notificationId]
+        );
+      }
+    });
   });
 }
 

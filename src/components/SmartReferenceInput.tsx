@@ -203,8 +203,8 @@ export function SmartReferenceInput({ value, onChange, onModeChange, onSubmit }:
           style={[styles.modeOption, mode === "single" && { backgroundColor: theme.accent }]}
           onPress={() => mode !== "single" && toggleMode()}
         >
-          <Ionicons name="book-outline" size={14} color={mode === "single" ? "#fff" : theme.accent} />
-          <Text style={[styles.modeText, { color: mode === "single" ? "#fff" : theme.accent }]}>
+          <Ionicons name="book-outline" size={14} color={mode === "single" ? theme.onAccent : theme.accent} />
+          <Text style={[styles.modeText, { color: mode === "single" ? theme.onAccent : theme.accent }]}>
             {" "}Single
           </Text>
         </Pressable>
@@ -212,8 +212,8 @@ export function SmartReferenceInput({ value, onChange, onModeChange, onSubmit }:
           style={[styles.modeOption, mode === "multi" && { backgroundColor: theme.accent }]}
           onPress={() => mode !== "multi" && toggleMode()}
         >
-          <Ionicons name="layers-outline" size={14} color={mode === "multi" ? "#fff" : theme.accent} />
-          <Text style={[styles.modeText, { color: mode === "multi" ? "#fff" : theme.accent }]}>
+          <Ionicons name="layers-outline" size={14} color={mode === "multi" ? theme.onAccent : theme.accent} />
+          <Text style={[styles.modeText, { color: mode === "multi" ? theme.onAccent : theme.accent }]}>
             {" "}Multi
           </Text>
         </Pressable>

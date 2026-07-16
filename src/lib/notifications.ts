@@ -115,6 +115,17 @@ export async function ensureNotificationPermission(): Promise<boolean> {
 // on scheduleVerseReminder below for why this matters.
 const LOOKAHEAD_COUNT = 20;
 
+// Belt-and-suspenders guard against overlapping schedule calls for the
+// *same verse* landing close together — e.g. a genuine add/edit action
+// racing with a top-up triggered a moment earlier for an unrelated
+// reason. If a verse was (re)scheduled in the last 30 seconds, skip a
+// second attempt rather than cancel-and-recreate a batch that's still
+// mid-flight, which is exactly the kind of overlap that can leave one
+// old, not-yet-cancelled occurrence sitting alongside a freshly scheduled
+// one for the same time slot.
+const RECENT_SCHEDULE_COOLDOWN_MS = 30_000;
+const recentlyScheduledAt = new Map<string, number>();
+
 /**
  * Schedules a verse's reminder batch.
  *
@@ -125,13 +136,46 @@ const LOOKAHEAD_COUNT = 20;
  * silently re-sends the "saved" notification, which is exactly what
  * produced the duplicate-notification bug this function used to have.
  */
-export async function scheduleVerseReminder(verse: any, sendImmediate: boolean = true) {
+export async function scheduleVerseReminder(
+  verse: any,
+  sendImmediate: boolean = true,
+  options: { skipCooldown?: boolean } = {}
+) {
   if (!Notifications) return;
+
+  const lastScheduled = recentlyScheduledAt.get(verse.id);
+  if (
+    !options.skipCooldown &&
+    lastScheduled &&
+    Date.now() - lastScheduled < RECENT_SCHEDULE_COOLDOWN_MS
+  ) {
+    return;
+  }
+  recentlyScheduledAt.set(verse.id, Date.now());
 
   try {
     const { saveNotificationIds } = await import("./db");
 
     await cancelVerseReminder(verse.id);
+
+    // Defense in depth: also cancel any natively-pending notification for
+    // this verse that our local id list might have missed — e.g. if the
+    // app was killed mid-schedule on a previous run, or the two ever
+    // drifted out of sync for any other reason. Cross-checking against
+    // the actual OS-level pending list, not just our own bookkeeping, is
+    // what guarantees this verse can never end up with two overlapping
+    // batches active at once.
+    try {
+      const pending: any[] = await Notifications.getAllScheduledNotificationsAsync();
+      const stray = pending.filter((n) => n?.content?.data?.verseId === verse.id);
+      for (const n of stray) {
+        await Notifications.cancelScheduledNotificationAsync(n.identifier).catch(() => {});
+      }
+    } catch {
+      // Non-fatal — the id-list-based cancel above already covers the
+      // common case; this is just an extra safety net.
+    }
+
     await ensureNotificationChannel();
 
     if (sendImmediate) {

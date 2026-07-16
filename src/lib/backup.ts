@@ -36,6 +36,8 @@ import {
   BackupFrequency,
   BackupSettings,
   getBackupSettings,
+  getBackupPassphraseProtected,
+  setBackupPassphraseProtected as persistPassphraseProtected,
   setBackupEnabled as persistBackupEnabled,
   setBackupFrequency as persistBackupFrequency,
   setLastBackupAt,
@@ -52,20 +54,33 @@ interface BackupPayload {
   categories: Category[];
 }
 
-function deriveKey(userId: string): string {
+function deriveKey(userId: string, passphrase?: string): string {
+  if (passphrase) {
+    // A passphrase-derived key never touches this device's storage or
+    // Supabase — only someone who knows it can decrypt the snapshot, even
+    // in a scenario where Supabase itself is fully compromised. The
+    // trade-off, spelled out in the UI, is that it must be re-entered on
+    // every manual backup/restore and can't be used for the unattended
+    // scheduled/background path (see maybeAutoBackup below).
+    return CryptoJS.SHA256(`${userId}:${BACKUP_PEPPER}:${passphrase}`).toString();
+  }
   return CryptoJS.SHA256(`${userId}:${BACKUP_PEPPER}`).toString();
 }
 
-function encryptPayload(payload: BackupPayload, userId: string): string {
+function encryptPayload(payload: BackupPayload, userId: string, passphrase?: string): string {
   const json = JSON.stringify(payload);
-  return CryptoJS.AES.encrypt(json, deriveKey(userId)).toString();
+  return CryptoJS.AES.encrypt(json, deriveKey(userId, passphrase)).toString();
 }
 
-function decryptPayload(ciphertext: string, userId: string): BackupPayload {
-  const bytes = CryptoJS.AES.decrypt(ciphertext, deriveKey(userId));
+function decryptPayload(ciphertext: string, userId: string, passphrase?: string): BackupPayload {
+  const bytes = CryptoJS.AES.decrypt(ciphertext, deriveKey(userId, passphrase));
   const json = bytes.toString(CryptoJS.enc.Utf8);
   if (!json) {
-    throw new Error("Backup could not be decrypted. It may be corrupted or from a different account.");
+    throw new Error(
+      passphrase
+        ? "Couldn't decrypt this backup — check that you entered the correct passphrase."
+        : "Backup could not be decrypted. It may be corrupted or from a different account."
+    );
   }
   return JSON.parse(json) as BackupPayload;
 }
@@ -109,6 +124,20 @@ export async function getSettings(): Promise<BackupSettings> {
   return getBackupSettings();
 }
 
+export async function isPassphraseProtected(): Promise<boolean> {
+  return getBackupPassphraseProtected();
+}
+
+/**
+ * Turning this on trades scheduled/automatic backups for a stronger,
+ * user-held encryption key — see maybeAutoBackup below. Turning it off
+ * doesn't re-encrypt any existing snapshot; the next manual "Back Up Now"
+ * (with no passphrase) does that.
+ */
+export async function setPassphraseProtected(enabled: boolean): Promise<void> {
+  await persistPassphraseProtected(enabled);
+}
+
 export async function enableBackup(userId: string): Promise<void> {
   await persistBackupEnabled(true);
   await supabase.from("backup_metadata").upsert({
@@ -142,7 +171,7 @@ export async function setFrequency(userId: string, frequency: BackupFrequency): 
  * run via maybeAutoBackup) through which any verse data reaches the
  * cloud.
  */
-export async function backupNow(userId: string): Promise<{ verseCount: number }> {
+export async function backupNow(userId: string, passphrase?: string): Promise<{ verseCount: number }> {
   const [verses, categories] = await Promise.all([
     getAllLocalVerses(userId),
     getAllLocalCategories(userId),
@@ -157,7 +186,7 @@ export async function backupNow(userId: string): Promise<{ verseCount: number }>
   };
 
   try {
-    const encrypted = encryptPayload(payload, userId);
+    const encrypted = encryptPayload(payload, userId, passphrase);
 
     const { error } = await supabase.from("backup_snapshots").upsert({
       user_id: userId,
@@ -200,7 +229,10 @@ export async function backupNow(userId: string): Promise<{ verseCount: number }>
  * local data for this user. Used when signing in on a new/reinstalled
  * device — "disaster recovery," not routine sync.
  */
-export async function restoreLatestBackup(userId: string): Promise<{ verseCount: number }> {
+export async function restoreLatestBackup(
+  userId: string,
+  passphrase?: string
+): Promise<{ verseCount: number }> {
   try {
     const { data, error } = await supabase
       .from("backup_snapshots")
@@ -213,7 +245,7 @@ export async function restoreLatestBackup(userId: string): Promise<{ verseCount:
       throw new Error("No backup was found for this account yet.");
     }
 
-    const payload = decryptPayload(data.encrypted_data, userId);
+    const payload = decryptPayload(data.encrypted_data, userId, passphrase);
     await replaceAllLocalData(userId, payload.verses, payload.categories);
     await registerDevice(userId);
     await recordSyncHistory(userId, "restore", true, payload.verses.length);
@@ -253,6 +285,26 @@ const FREQUENCY_MS: Record<BackupFrequency, number> = {
 export async function maybeAutoBackup(userId: string): Promise<void> {
   const settings = await getBackupSettings();
   if (!settings.enabled) return;
+
+  const { checkPremiumEntitlement } = await import("@/lib/purchases");
+  const entitled = await checkPremiumEntitlement(userId);
+  if (!entitled) {
+    // Subscription lapsed (or was never active) since the user last
+    // toggled this on. Don't silently keep backing up — the Backup &
+    // Restore screen will show the paywall prompt again next time it's
+    // opened, and the local `enabled` preference is left as-is so
+    // resubscribing picks the schedule back up without the user having
+    // to reconfigure it.
+    return;
+  }
+
+  const passphraseProtected = await getBackupPassphraseProtected();
+  if (passphraseProtected) {
+    // Can't run unattended — there's nobody present to type the
+    // passphrase. The user backs up manually from app/backup.tsx instead;
+    // "Last Backup Date" there will accurately reflect that.
+    return;
+  }
 
   const dueInMs = FREQUENCY_MS[settings.frequency];
   const last = settings.lastBackupAt ? new Date(settings.lastBackupAt).getTime() : 0;

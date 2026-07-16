@@ -167,11 +167,11 @@ export default function AddVerseScreen() {
             ]}
           >
             {preview.status === "searching" ? (
-              <ActivityIndicator color="#fff" size="small" />
+              <ActivityIndicator color={theme.onAccent} size="small" />
             ) : (
               <>
-                <Ionicons name="search" size={16} color="#fff" />
-                <Text style={styles.searchBtnText}>Search Verse</Text>
+                <Ionicons name="search" size={16} color={theme.onAccent} />
+                <Text style={[styles.searchBtnText, { color: theme.onAccent }]}>Search Verse</Text>
               </>
             )}
           </Pressable>
@@ -183,7 +183,7 @@ export default function AddVerseScreen() {
                 <Ionicons name="checkmark-circle" size={18} color={theme.accent} />
                 <Text style={[styles.previewRef, { color: theme.text }]}>{preview.result.reference}</Text>
                 <View style={[styles.translationBadge, { backgroundColor: theme.accent }]}>
-                  <Text style={styles.translationBadgeText}>{preview.result.translation}</Text>
+                  <Text style={[styles.translationBadgeText, { color: theme.onAccent }]}>{preview.result.translation}</Text>
                 </View>
               </View>
               <Text style={[styles.previewText, { color: theme.text }]}>{preview.result.text}</Text>
@@ -315,13 +315,13 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 14,
   },
-  searchBtnText: { color: "#fff", fontSize: 14, fontWeight: "700" },
+  searchBtnText: { fontSize: 14, fontWeight: "700" },
   previewCard: { marginTop: 16, borderRadius: 14, borderWidth: 1, padding: 14 },
   errorCard: { marginTop: 16, borderRadius: 14, borderWidth: 1, padding: 14 },
   previewHeader: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 },
   previewRef: { fontSize: 15, fontWeight: "800", flex: 1 },
   translationBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999 },
-  translationBadgeText: { color: "#fff", fontSize: 11, fontWeight: "800" },
+  translationBadgeText: { fontSize: 11, fontWeight: "800" },
   previewText: { fontSize: 15, lineHeight: 22 },
   previewHint: { fontSize: 12, marginTop: 10, fontStyle: "italic" },
   addHint: { textAlign: "center", marginTop: 10, fontSize: 13 },

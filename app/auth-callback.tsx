@@ -104,7 +104,7 @@ export default function AuthCallbackScreen() {
           style={[styles.button, { backgroundColor: theme.accent }]}
           onPress={() => router.replace("/(auth)/sign-in")}
         >
-          <Text style={styles.buttonText}>Back to Sign In</Text>
+          <Text style={[styles.buttonText, { color: theme.onAccent }]}>Back to Sign In</Text>
         </Pressable>
       </View>
     );
@@ -148,5 +148,5 @@ const styles = StyleSheet.create({
   title: { fontSize: 20, fontWeight: "700", marginBottom: 8, textAlign: "center" },
   body: { fontSize: 15, textAlign: "center", lineHeight: 21, marginBottom: 28 },
   button: { paddingVertical: 14, paddingHorizontal: 32, borderRadius: 999 },
-  buttonText: { color: "#fff", fontSize: 15, fontWeight: "700" },
+  buttonText: { fontSize: 15, fontWeight: "700" },
 });

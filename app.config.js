@@ -2,7 +2,7 @@ export default {
   expo: {
     name: "Scripture Memory",
     slug: "scripture-memory-app",
-    version: "1.0.0",
+    version: "1.0.1",
     scheme: "scripturememory",
     orientation: "portrait",
     userInterfaceStyle: "automatic",
@@ -11,6 +11,26 @@ export default {
     plugins: [
       "expo-router",
       "expo-web-browser",
+      "expo-task-manager",
+      "expo-background-task",
+      "./plugins/withAndroidAbiSplit",
+      [
+        "expo-build-properties",
+        {
+          android: {
+            // R8/minification strips unused Java/Kotlin code and
+            // obfuscates what's left; shrinkResources removes unused
+            // resources (images, layouts, etc. pulled in by dependencies
+            // but never actually referenced). Both are off by default in
+            // EAS managed builds — turning them on is one of the more
+            // reliable, no-tradeoff ways to cut APK size, alongside the
+            // ABI split above. See PHASE_4_NOTES.md for the full app-size
+            // writeup.
+            enableMinifyInReleaseBuilds: true,
+            enableShrinkResourcesInReleaseBuilds: true,
+          },
+        },
+      ],
       [
         "expo-splash-screen",
         {
@@ -39,6 +59,15 @@ export default {
       bundleIdentifier: "com.joeladeyoju.scripturememory",
       infoPlist: {
         UIBackgroundModes: ["remote-notification", "fetch"],
+        // NOTE: "processing" mode and BGTaskSchedulerPermittedIdentifiers
+        // are added automatically by the expo-background-task config
+        // plugin above (it owns a fixed internal task identifier,
+        // com.expo.modules.backgroundtask.processing — not a name we
+        // choose). Don't hand-add either here; that plugin is the one
+        // source of truth for this, and a second definition of the same
+        // keys is exactly the "which one wins" bug this file has already
+        // been burned by once (see the notification-handler comment
+        // below).
       },
     },
 

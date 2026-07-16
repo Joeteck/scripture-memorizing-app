@@ -45,13 +45,16 @@ export function PrimaryButton({
 
   const textColor =
     variant === "filled"
-      ? "#FFFFFF"
+      ? theme.onAccent
       : theme.accent;
 
   return (
     <Pressable
       disabled={isDisabled}
       onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ disabled: isDisabled, busy: loading }}
       style={({ pressed }) => [
         styles.button,
 

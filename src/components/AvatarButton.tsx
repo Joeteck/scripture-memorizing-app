@@ -2,12 +2,8 @@
 // Premium glassmorphism avatar button with shining animation
 import React, { useEffect, useRef } from "react";
 import { Animated, Pressable, StyleSheet, Text, View } from "react-native";
-import { useTheme } from "@/theme";
-
-const AVATAR_COLORS = [
-  "#3D4B8C", "#5B8266", "#C98A3E", "#A14B4B",
-  "#6B7280", "#2563EB", "#9333EA", "#EA580C",
-];
+import { useTheme, getReadableTextColor } from "@/theme";
+import { AVATAR_COLORS } from "@/theme/avatarColors";
 
 interface Props {
   initials: string;
@@ -41,6 +37,7 @@ export function AvatarButton({ initials, avatarIndex = 0, onPress, size = 52 }: 
   }, []);
 
   const avatarColor = AVATAR_COLORS[avatarIndex % AVATAR_COLORS.length];
+  const initialsColor = getReadableTextColor(avatarColor);
   const borderRadius = size / 2;
 
   const shineTranslate = shineAnim.interpolate({
@@ -87,7 +84,7 @@ export function AvatarButton({ initials, avatarIndex = 0, onPress, size = 52 }: 
         <Text
           style={[
             styles.initials,
-            { fontSize: size * 0.35, color: "#fff" },
+            { fontSize: size * 0.35, color: initialsColor },
           ]}
         >
           {initials}

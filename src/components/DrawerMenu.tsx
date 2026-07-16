@@ -14,7 +14,8 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { useTheme } from "@/theme";
+import { useTheme, getReadableTextColor } from "@/theme";
+import { AVATAR_COLORS } from "@/theme/avatarColors";
 
 const { width: SW } = Dimensions.get("window");
 const DRAWER_WIDTH = SW * 0.78;
@@ -34,11 +35,6 @@ interface Props {
   avatarIndex?: number;
   onSignOut?: () => void;
 }
-
-const AVATAR_COLORS = [
-  "#3D4B8C", "#5B8266", "#C98A3E", "#A14B4B",
-  "#6B7280", "#2563EB", "#9333EA", "#EA580C",
-];
 
 export function DrawerMenu({ visible, onClose, userName, userEmail, avatarIndex = 0, onSignOut }: Props) {
   const theme = useTheme();
@@ -62,6 +58,7 @@ export function DrawerMenu({ visible, onClose, userName, userEmail, avatarIndex 
 
   const displayName = userName || userEmail?.split("@")[0] || "Friend";
   const avatarBg = AVATAR_COLORS[avatarIndex % AVATAR_COLORS.length];
+  const avatarTextColor = getReadableTextColor(avatarBg);
   const initials = (displayName.slice(0, 2) || "SC").toUpperCase();
 
   // One consistent set of destinations reachable from every screen in the
@@ -106,7 +103,7 @@ export function DrawerMenu({ visible, onClose, userName, userEmail, avatarIndex 
           <View style={[styles.profileSection, { borderBottomColor: theme.border }]}>
             {/* Avatar */}
             <View style={[styles.avatar, { backgroundColor: avatarBg }]}>
-              <Text style={styles.avatarText}>{initials}</Text>
+              <Text style={[styles.avatarText, { color: avatarTextColor }]}>{initials}</Text>
               {/* Shine overlay */}
               <View style={styles.shine} />
             </View>
@@ -128,6 +125,8 @@ export function DrawerMenu({ visible, onClose, userName, userEmail, avatarIndex 
                   { backgroundColor: pressed ? theme.accentSoft : "transparent" },
                 ]}
                 onPress={item.onPress}
+                accessibilityRole="button"
+                accessibilityLabel={item.label}
               >
                 <View style={[styles.menuIcon, { backgroundColor: theme.accentSoft }]}>
                   <Ionicons name={item.icon} size={20} color={item.danger ? "#C0392B" : theme.accent} />
@@ -145,6 +144,8 @@ export function DrawerMenu({ visible, onClose, userName, userEmail, avatarIndex 
             <Pressable
               style={[styles.signOutBtn, { borderColor: theme.border }]}
               onPress={() => { onClose(); onSignOut(); }}
+              accessibilityRole="button"
+              accessibilityLabel="Sign out"
             >
               <Ionicons name="log-out-outline" size={18} color="#C0392B" />
               <Text style={[styles.signOutText]}>Sign Out</Text>
@@ -186,7 +187,6 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   avatarText: {
-    color: "#fff",
     fontSize: 26,
     fontWeight: "800",
   },

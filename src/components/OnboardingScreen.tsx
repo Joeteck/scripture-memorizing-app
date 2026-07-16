@@ -150,8 +150,8 @@ export function OnboardingScreen({ onComplete }: Props) {
         style={[styles.btn, { backgroundColor: theme.accent }]}
         onPress={goNext}
       >
-        <Text style={styles.btnText}>{isLast ? "Get Started" : "Continue"}</Text>
-        <Ionicons name={isLast ? "checkmark" : "arrow-forward"} size={20} color="#fff" style={{ marginLeft: 8 }} />
+        <Text style={[styles.btnText, { color: theme.onAccent }]}>{isLast ? "Get Started" : "Continue"}</Text>
+        <Ionicons name={isLast ? "checkmark" : "arrow-forward"} size={20} color={theme.onAccent} style={{ marginLeft: 8 }} />
       </Pressable>
 
       <View style={{ height: 32 }} />
@@ -219,5 +219,5 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     elevation: 4,
   },
-  btnText: { color: "#fff", fontSize: 17, fontWeight: "700" },
+  btnText: { fontSize: 17, fontWeight: "700" },
 });

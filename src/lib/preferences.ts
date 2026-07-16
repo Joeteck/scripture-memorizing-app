@@ -103,3 +103,22 @@ export async function setBackupFrequency(frequency: BackupFrequency): Promise<vo
 export async function setLastBackupAt(iso: string): Promise<void> {
   await AsyncStorage.setItem(BACKUP_LAST_AT_KEY, iso);
 }
+
+// Opt-in extra protection: when on, backups are encrypted with a
+// passphrase the user holds instead of a key derived purely from their
+// account id. Nothing about the passphrase itself is ever persisted —
+// only this on/off flag, so the UI knows to prompt for it. See the
+// trade-off this implies for scheduled backups in src/lib/backup.ts.
+const BACKUP_PASSPHRASE_PROTECTED_KEY = "pref:backupPassphraseProtected";
+
+export async function getBackupPassphraseProtected(): Promise<boolean> {
+  try {
+    return (await AsyncStorage.getItem(BACKUP_PASSPHRASE_PROTECTED_KEY)) === "true";
+  } catch {
+    return false;
+  }
+}
+
+export async function setBackupPassphraseProtected(enabled: boolean): Promise<void> {
+  await AsyncStorage.setItem(BACKUP_PASSPHRASE_PROTECTED_KEY, enabled ? "true" : "false");
+}

@@ -322,7 +322,7 @@ export function SwipeDeck({ verses, categoriesById, onMastered, onSkip }: Props)
             size={28}
             color={theme.mastered}
           />
-          <Text style={[styles.actionLabel, { color: theme.mastered }]}>
+          <Text style={[styles.actionLabel, { color: theme.masteredText }]}>
             Mastered
           </Text>
         </TouchableOpacity>

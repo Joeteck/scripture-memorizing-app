@@ -1,5 +1,5 @@
 // src/components/VerseCard.tsx  — auto-sizing, premium feel, no fixed minHeight
-import React from "react";
+import React, { memo } from "react";
 import { View, Text, StyleSheet } from "react-native";
 import { useTheme, type } from "@/theme";
 import { Verse, Category } from "@/types";
@@ -17,7 +17,7 @@ function formatInterval(minutes: number) {
   return `${minutes} min`;
 }
 
-export function VerseCard({ verse, category }: Props) {
+function VerseCardComponent({ verse, category }: Props) {
   const theme = useTheme();
 
   return (
@@ -132,4 +132,7 @@ const styles = StyleSheet.create({
   footerText: { fontSize: 12, fontWeight: "600" },
 });
 
+const VerseCard = memo(VerseCardComponent);
+
 export default VerseCard;
+export { VerseCard };
