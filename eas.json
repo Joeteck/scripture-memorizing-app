@@ -16,6 +16,7 @@
     },
     "direct-download": {
       "distribution": "internal",
+      "environment": "production",
       "android": {
         "buildType": "apk"
       },
